@@ -1,0 +1,27 @@
+# ============================================================================
+# Google Cloud + Supabase Terraform Variables Example
+# Copy this file to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+# ============================================================================
+
+project_id = "your-gcp-project-id"
+region     = "asia-northeast1"
+
+# Supabase PostgreSQL Session Mode Pooler URL (IPv4 compatible, Tokyo ap-northeast-1)
+database_url = "postgresql://postgres.fercjbbethixmzwdhiyr:YOUR_SUPABASE_PASSWORD@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
+
+# Optional External API Keys (Leave as mock_* to use Graceful Fallback mode)
+fmp_api_key               = "mock_fmp_key"
+llm_api_base_url          = "https://api.openai.com/v1"
+llm_api_key               = "mock_llm_key"
+llm_model                 = "argon"
+line_channel_access_token = "mock_line_token"
+line_user_id              = "mock_line_user_id"
+
+# Public HTTP Access (true = Accessible via browser URL, false = IAM authenticated only)
+allow_public_access = true
+
+# Cloud Scheduler Cron Settings (JST / Asia/Tokyo)
+daily_check_cron    = "30 6 * * 2-6"
+earnings_check_cron = "35 6 * * 2-6"
+scheduler_timezone  = "Asia/Tokyo"

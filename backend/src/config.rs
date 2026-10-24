@@ -4,6 +4,7 @@ use std::env;
 pub struct AppConfig {
     pub database_url: String,
     pub backend_port: u16,
+    pub enable_internal_scheduler: bool,
     pub fmp_api_key: String,
     pub llm_api_base_url: String,
     pub llm_api_key: String,
@@ -20,9 +21,17 @@ impl AppConfig {
         let database_url = env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://postgres:password@localhost:5432/stock_analyst".to_string());
         let backend_port = env::var("BACKEND_PORT")
+            .or_else(|_| env::var("PORT"))
             .ok()
             .and_then(|p| p.parse::<u16>().ok())
             .unwrap_or(8080);
+
+        let enable_internal_scheduler = env::var("ENABLE_INTERNAL_SCHEDULER")
+            .map(|v| {
+                let lower = v.trim().to_ascii_lowercase();
+                lower != "false" && lower != "0" && lower != "no"
+            })
+            .unwrap_or(true);
 
         let fmp_api_key = env::var("FMP_API_KEY").unwrap_or_else(|_| "mock_fmp_key".to_string());
 
@@ -44,6 +53,7 @@ impl AppConfig {
         Self {
             database_url,
             backend_port,
+            enable_internal_scheduler,
             fmp_api_key,
             llm_api_base_url,
             llm_api_key,

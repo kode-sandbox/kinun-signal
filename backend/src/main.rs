@@ -59,7 +59,12 @@ async fn main() -> anyhow::Result<()> {
         line,
     });
 
-    let _scheduler = scheduler::start_scheduler(state.clone()).await?;
+    let _scheduler = if cfg.enable_internal_scheduler {
+        Some(scheduler::start_scheduler(state.clone()).await?)
+    } else {
+        info!("Internal cron scheduler is disabled (ENABLE_INTERNAL_SCHEDULER=false); relying on external Cloud Scheduler.");
+        None
+    };
 
     let app = Router::new()
         .route(

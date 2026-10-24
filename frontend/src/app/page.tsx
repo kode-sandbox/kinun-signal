@@ -16,8 +16,7 @@ import StockDetailModal from "@/components/StockDetailModal";
 import AddStockModal from "@/components/AddStockModal";
 import { AlertLog, JobSummaryResponse, WatchlistItem } from "@/types/stock";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const FALLBACK_WATCHLIST: WatchlistItem[] = [
   {

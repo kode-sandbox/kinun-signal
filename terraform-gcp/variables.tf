@@ -17,7 +17,7 @@ variable "service_prefix" {
 
 variable "artifact_registry_repo_id" {
   type        = string
-  default     = "kinun-signal"
+  default     = "kinun-signal-images"
   description = "Artifact Registry Docker repository ID"
 }
 

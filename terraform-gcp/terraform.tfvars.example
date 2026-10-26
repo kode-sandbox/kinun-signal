@@ -6,6 +6,7 @@
 
 project_id = "your-gcp-project-id"
 region     = "asia-northeast1"
+artifact_registry_repo_id = "kinun-signal-images"
 
 # Supabase PostgreSQL Session Mode Pooler URL (IPv4 compatible, Tokyo ap-northeast-1)
 database_url = "postgresql://postgres.fercjbbethixmzwdhiyr:YOUR_SUPABASE_PASSWORD@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"

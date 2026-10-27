@@ -87,6 +87,45 @@ struct FmpNewsItemRaw {
     url: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct YahooChartResponse {
+    chart: YahooChartResultWrapper,
+}
+
+#[derive(Debug, Deserialize)]
+struct YahooChartResultWrapper {
+    result: Option<Vec<YahooChartResultItem>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct YahooChartResultItem {
+    meta: YahooChartMeta,
+}
+
+#[derive(Debug, Deserialize)]
+struct YahooChartMeta {
+    #[serde(rename = "regularMarketPrice")]
+    regular_market_price: Option<f64>,
+    #[serde(rename = "longName")]
+    long_name: Option<String>,
+    #[serde(rename = "shortName")]
+    short_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct YahooSearchResponse {
+    news: Option<Vec<YahooSearchNewsItem>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct YahooSearchNewsItem {
+    title: Option<String>,
+    link: Option<String>,
+    publisher: Option<String>,
+    #[serde(rename = "providerPublishTime")]
+    provider_publish_time: Option<i64>,
+}
+
 impl FmpClient {
     pub fn new(config: AppConfig) -> Self {
         Self {
@@ -100,21 +139,93 @@ impl FmpClient {
 
     pub async fn fetch_financials(&self, ticker: &str) -> StockFinancials {
         let symbol = ticker.trim().to_uppercase();
-        if self.config.is_fmp_mock() {
-            info!("FMP_API_KEY is mock/unset. Returning realistic mock financials for {}", symbol);
-            return Self::mock_financials(&symbol);
-        }
-
-        match self.fetch_financials_from_api(&symbol).await {
-            Ok(fin) => fin,
-            Err(err) => {
-                warn!(
-                    "FMP API call failed for {} ({}). Falling back to realistic mock data.",
-                    symbol, err
-                );
-                Self::mock_financials(&symbol)
+        if !self.config.is_fmp_mock() {
+            match self.fetch_financials_from_api(&symbol).await {
+                Ok(fin) => return fin,
+                Err(err) => {
+                    warn!(
+                        "FMP API call failed for {} ({}). Falling back to Yahoo Finance live quote + realistic financials.",
+                        symbol, err
+                    );
+                }
             }
         }
+
+        // Fetch LIVE real-time market quote from Yahoo Finance
+        let mut fin = Self::mock_financials(&symbol);
+        match self.fetch_real_quote_from_yahoo(&symbol).await {
+            Ok((real_price, real_name)) => {
+                info!("Successfully fetched LIVE market price for {}: ${:.2}", symbol, real_price);
+                fin.current_price = real_price;
+                if let Some(name) = real_name {
+                    fin.company_name = name;
+                }
+            }
+            Err(err) => {
+                warn!("Could not fetch live Yahoo quote for {} ({}). Using base reference price.", symbol, err);
+            }
+        }
+        fin
+    }
+
+    pub async fn fetch_real_quote_from_yahoo(&self, symbol: &str) -> anyhow::Result<(f64, Option<String>)> {
+        let url = format!("https://query1.finance.yahoo.com/v8/finance/chart/{}", symbol);
+        let resp = self
+            .http
+            .get(&url)
+            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("Yahoo finance HTTP {}", resp.status());
+        }
+        let body: YahooChartResponse = resp.json().await?;
+        let item = body
+            .chart
+            .result
+            .and_then(|r| r.into_iter().next())
+            .ok_or_else(|| anyhow::anyhow!("No result in Yahoo chart for {}", symbol))?;
+        let price = item.meta.regular_market_price.ok_or_else(|| anyhow::anyhow!("No regularMarketPrice"))?;
+        let name = item.meta.long_name.or(item.meta.short_name);
+        Ok((price, name))
+    }
+
+    pub async fn fetch_real_news_from_yahoo(&self, symbol: &str) -> anyhow::Result<Vec<StockNewsItem>> {
+        let url = format!("https://query2.finance.yahoo.com/v1/finance/search?q={}&newsCount=5", symbol);
+        let resp = self
+            .http
+            .get(&url)
+            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("Yahoo news HTTP {}", resp.status());
+        }
+        let body: YahooSearchResponse = resp.json().await?;
+        let news_items = body
+            .news
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|n| {
+                let title = n.title?;
+                let url = n.link.unwrap_or_default();
+                let date_str = if let Some(ts) = n.provider_publish_time {
+                    chrono::DateTime::from_timestamp(ts, 0)
+                        .map(|dt| dt.format("%Y-%m-%d").to_string())
+                        .unwrap_or_else(|| "Recent".to_string())
+                } else {
+                    "Recent".to_string()
+                };
+                let publisher = n.publisher.unwrap_or_else(|| "Yahoo Finance".to_string());
+                Some(StockNewsItem {
+                    title: title.clone(),
+                    published_date: date_str,
+                    text: format!("{}: {}", publisher, title),
+                    url,
+                })
+            })
+            .collect();
+        Ok(news_items)
     }
 
     async fn fetch_financials_from_api(&self, symbol: &str) -> anyhow::Result<StockFinancials> {
@@ -207,32 +318,40 @@ impl FmpClient {
 
     pub async fn fetch_news(&self, ticker: &str) -> Vec<StockNewsItem> {
         let symbol = ticker.trim().to_uppercase();
-        if self.config.is_fmp_mock() {
-            return Self::mock_news(&symbol);
+        if !self.config.is_fmp_mock() {
+            let url = format!(
+                "https://financialmodelingprep.com/api/v3/stock_news?tickers={}&limit=5&apikey={}",
+                symbol, self.config.fmp_api_key
+            );
+
+            if let Ok(resp) = self.http.get(&url).send().await {
+                if let Ok(items) = resp.json::<Vec<FmpNewsItemRaw>>().await {
+                    if !items.is_empty() {
+                        return items
+                            .into_iter()
+                            .map(|i| StockNewsItem {
+                                title: i.title,
+                                published_date: i.published_date,
+                                text: i.text,
+                                url: i.url,
+                            })
+                            .collect();
+                    }
+                }
+            }
         }
 
-        let url = format!(
-            "https://financialmodelingprep.com/api/v3/stock_news?tickers={}&limit=5&apikey={}",
-            symbol, self.config.fmp_api_key
-        );
-
-        match self.http.get(&url).send().await {
-            Ok(resp) => match resp.json::<Vec<FmpNewsItemRaw>>().await {
-                Ok(items) if !items.is_empty() => items
-                    .into_iter()
-                    .map(|i| StockNewsItem {
-                        title: i.title,
-                        published_date: i.published_date,
-                        text: i.text,
-                        url: i.url,
-                    })
-                    .collect(),
-                _ => Self::mock_news(&symbol),
-            },
+        // Live news from Yahoo Finance
+        match self.fetch_real_news_from_yahoo(&symbol).await {
+            Ok(news) if !news.is_empty() => {
+                info!("Fetched {} LIVE news items from Yahoo Finance for {}", news.len(), symbol);
+                news
+            }
             Err(err) => {
-                warn!("FMP news fetch failed for {} ({}). Using mock news.", symbol, err);
+                warn!("Yahoo news fetch failed for {} ({}). Using mock news.", symbol, err);
                 Self::mock_news(&symbol)
             }
+            _ => Self::mock_news(&symbol),
         }
     }
 
@@ -428,4 +547,29 @@ impl FmpClient {
 
 fn futures_or_none<T>(_resp: T) -> Option<Vec<FmpEarningsSurpriseItem>> {
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_yahoo_live_quote_and_news() {
+        let config = AppConfig::from_env();
+        let client = FmpClient::new(config);
+
+        let financials = client.fetch_financials("AAPL").await;
+        println!("Fetched AAPL Price: ${:.2}, Company: {}", financials.current_price, financials.company_name);
+        assert!(financials.current_price > 50.0);
+        assert_eq!(financials.ticker, "AAPL");
+
+        let nvda_fin = client.fetch_financials("NVDA").await;
+        println!("Fetched NVDA Price: ${:.2}, Company: {}", nvda_fin.current_price, nvda_fin.company_name);
+        assert!(nvda_fin.current_price > 50.0);
+
+        let news = client.fetch_news("AAPL").await;
+        println!("Fetched {} AAPL news items", news.len());
+        assert!(!news.is_empty());
+        println!("First news: {:?}", news[0].title);
+    }
 }

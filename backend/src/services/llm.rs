@@ -323,4 +323,45 @@ mod tests {
         assert_eq!(parsed.wacc, 0.085);
         assert_eq!(parsed.growth_rate_base, 0.12);
     }
+
+    #[tokio::test]
+    async fn test_live_llm_if_configured() {
+        let config = AppConfig::from_env();
+        if config.is_llm_mock() {
+            println!("Skipping live LLM test because LLM_API_KEY is mock/unset");
+            return;
+        }
+
+        let client = LlmClient::new(config.clone());
+        let mock_financials = StockFinancials {
+            ticker: "AAPL".to_string(),
+            company_name: "Apple Inc.".to_string(),
+            current_price: 220.0,
+            cash_and_short_term_investments: 60_000_000_000.0,
+            total_debt: 100_000_000_000.0,
+            free_cash_flow: 100_000_000_000.0,
+            fcf_history: vec![90_000_000_000.0, 95_000_000_000.0, 100_000_000_000.0],
+            revenue_history: vec![380_000_000_000.0, 385_000_000_000.0, 390_000_000_000.0],
+            shares_outstanding: 15_000_000_000.0,
+            latest_earnings_date: None,
+            eps_actual: None,
+            eps_estimated: None,
+        };
+
+        let result = client.infer_dcf_parameters(&mock_financials, &[]).await;
+        println!("Real LLM Inference Result: {:?}", result);
+        assert!(result.wacc > 0.0);
+        assert!(result.growth_rate_base > 0.0);
+        assert!(!result.reasoning_ja.is_empty());
+
+        let mock_news = vec![StockNewsItem {
+            title: "Apple introduces next-gen AI services".to_string(),
+            published_date: "2026-10-27".to_string(),
+            text: "Apple expanded its generative AI toolset across devices, boosting services outlook.".to_string(),
+            url: "https://example.com/apple".to_string(),
+        }];
+        let summary = client.summarize_news("AAPL", "Apple Inc.", &mock_news).await;
+        println!("Real LLM News Summary: {}", summary);
+        assert!(!summary.is_empty());
+    }
 }

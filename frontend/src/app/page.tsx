@@ -257,7 +257,7 @@ export default function DashboardPage() {
         id: Date.now() + idx,
         ticker: item.ticker,
         alert_type: "EARNINGS",
-        message: `📊【四半期決算速報＆理論株価アップデート】${item.company_name} (${item.ticker})\nEPS実績が市場予想を+6.8%ビート！\n🔄 理論株価再計算: 新Base理論株価 $${item.base_price.toFixed(
+        message: `📊【四半期決算＆理論株価アップデート】${item.company_name} (${item.ticker})\n🔄 理論株価再計算: 新Base理論株価 $${item.base_price.toFixed(
           2
         )} (現在株価比: ${item.divergence_rate.toFixed(2)}%)`,
         sent_at: nowIso,

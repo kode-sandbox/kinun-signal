@@ -71,7 +71,10 @@ async fn main() -> anyhow::Result<()> {
             "/api/watchlist",
             get(handlers::get_watchlist).post(handlers::add_watchlist),
         )
-        .route("/api/watchlist/:ticker", delete(handlers::delete_watchlist))
+        .route(
+            "/api/watchlist/:ticker",
+            delete(handlers::delete_watchlist).patch(handlers::update_watchlist_settings),
+        )
         .route("/api/stocks/:ticker", get(handlers::get_stock_detail))
         .route(
             "/api/stocks/:ticker/recalculate",

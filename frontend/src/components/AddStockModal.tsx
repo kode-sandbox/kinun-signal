@@ -118,16 +118,18 @@ export default function AddStockModal({
                 htmlFor="discount-input"
                 className="font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
               >
-                目標割安アラート閾値 (%)
+                目標割安アラート閾値 (%) ※登録後も変更可
               </label>
               <span className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                理論株価より {targetDiscountRate}% 以上割安で通知
+                {targetDiscountRate >= 0
+                  ? `理論株価より ${targetDiscountRate}% 以上割安で通知`
+                  : `理論株価 +${Math.abs(targetDiscountRate)}% 以下で通知`}
               </span>
             </div>
             <input
               id="discount-input"
               type="range"
-              min={5}
+              min={-10}
               max={40}
               step={5}
               value={targetDiscountRate}
@@ -135,12 +137,11 @@ export default function AddStockModal({
               disabled={isSubmitting}
               className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-200 accent-emerald-500 dark:bg-slate-800"
             />
-            <div className="relative mt-2 h-4 font-mono text-[10px] text-slate-500">
-              <span className="absolute left-[0%] top-0 -translate-x-0">5%</span>
-              <span className="absolute left-[28.5%] top-0 -translate-x-1/2">15%</span>
-              <span className="absolute left-[42.8%] top-0 -translate-x-1/2">20% (推奨)</span>
-              <span className="absolute left-[71.4%] top-0 -translate-x-1/2">30%</span>
-              <span className="absolute left-[100%] top-0 -translate-x-full">40%</span>
+            <div className="mt-1.5 flex justify-between font-mono text-[10px] text-slate-500">
+              <span>-10% (グロース許容)</span>
+              <span>0% (理論株価と同値)</span>
+              <span>20% (推奨)</span>
+              <span>40% (厳格)</span>
             </div>
           </div>
 
@@ -150,8 +151,8 @@ export default function AddStockModal({
               <span>登録時の自動パイプライン処理</span>
             </div>
             <p className="leading-relaxed text-slate-600 dark:text-slate-300">
-              FMP財務データ取得 ➔ LLMで成長率・WACC推論
-              ➔ DCF理論株価算出 ➔ LINEへ初回分析レポート通知まで自動実行します。
+              Yahoo Finance実財務データ・米10年債利回り・β値取得 ➔ CAPMでWACC＆永久成長率を自走算出
+              ➔ 10年3段階DCF理論株価＆逆算DCF算出 ➔ LINEへ初回分析レポート通知まで自動実行します。
             </p>
           </div>
 

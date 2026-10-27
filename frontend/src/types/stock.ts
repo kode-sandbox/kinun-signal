@@ -13,6 +13,7 @@ export interface WatchlistItem {
   growth_rate_bull?: number;
   growth_rate_bear?: number;
   terminal_growth_rate?: number;
+  implied_growth_rate?: number | null;
   net_cash?: number;
   free_cash_flow?: number;
   shares_outstanding?: number;
@@ -71,6 +72,14 @@ export interface StockDetail {
   current_price?: number;
   divergence_rate?: number;
   is_undervalued_alert?: boolean;
+  implied_growth_rate?: number | null;
+  auto_wacc?: number | null;
+  auto_terminal_growth_rate?: number | null;
+  beta?: number | null;
+  risk_free_rate?: number | null;
+  effective_tax_rate?: number | null;
+  latest_revenue?: number | null;
+  fcf_margin?: number | null;
   latest_theoretical: TheoreticalPriceRecord | null;
   theoretical_history: TheoreticalPriceRecord[];
   daily_prices?: DailyPriceRecord[];

@@ -157,7 +157,7 @@ export default function StockCard({ stock, onSelect }: StockCardProps) {
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
               <div
-                className="h-full rounded-full bg-slate-800 dark:bg-gradient-to-r dark:from-emerald-500 dark:to-emerald-400"
+                className="h-full rounded-full bg-emerald-500 dark:bg-gradient-to-r dark:from-emerald-500 dark:to-emerald-400"
                 style={{ width: `${baseWidth}%` }}
               />
             </div>

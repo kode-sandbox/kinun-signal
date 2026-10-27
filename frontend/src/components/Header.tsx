@@ -63,22 +63,20 @@ export default function Header({
               onClick={onToggleTheme}
               title={
                 isDark
-                  ? "ホワイトベース（ライトモード）に切り替え"
-                  : "ブラックベース（ダークモード）に切り替え"
+                  ? "ホワイト画面へ切り替え"
+                  : "ブラック画面へ切り替え"
               }
-              aria-label="画面テーマ切り替え"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:shadow-none dark:hover:border-slate-600 dark:hover:bg-slate-800 sm:text-sm"
+              aria-label={
+                isDark
+                  ? "ホワイト画面へ切り替え"
+                  : "ブラック画面へ切り替え"
+              }
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:shadow-none dark:hover:border-slate-600 dark:hover:bg-slate-800"
             >
               {isDark ? (
-                <>
-                  <Sun className="h-4 w-4 text-amber-400" />
-                  <span>ホワイト画面へ切替</span>
-                </>
+                <Sun className="h-4 w-4 text-amber-400" />
               ) : (
-                <>
-                  <Moon className="h-4 w-4 text-slate-700" />
-                  <span>ブラック画面へ切替</span>
-                </>
+                <Moon className="h-4 w-4 text-slate-700" />
               )}
             </button>
           )}

@@ -86,6 +86,7 @@ async fn main() -> anyhow::Result<()> {
             post(handlers::run_earnings_check_handler),
         )
         .route("/api/alerts", get(handlers::get_alerts))
+        .route("/api/system/info", get(handlers::get_system_info))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);

@@ -30,6 +30,16 @@ resource "google_service_account" "frontend_sa" {
   ]
 }
 
+# Allow Frontend SA to read Basic Auth secrets from Secret Manager
+resource "google_secret_manager_secret_iam_member" "frontend_secret_access" {
+  for_each = toset(["basic_auth_user", "basic_auth_password"])
+
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.app_secrets[each.key].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.frontend_sa.email}"
+}
+
 # Allow Frontend SA to invoke Backend Cloud Run service
 resource "google_cloud_run_v2_service_iam_member" "frontend_invokes_backend" {
   project  = var.project_id
@@ -59,23 +69,13 @@ resource "google_cloud_run_v2_service_iam_member" "scheduler_invokes_backend" {
   member   = "serviceAccount:${google_service_account.scheduler_sa.email}"
 }
 
-# 4. Public HTTP Access (when allow_public_access = true)
+# 4. Public HTTP Access for Frontend only (Backend is private and only invokable by Frontend SA & Scheduler SA)
 resource "google_cloud_run_v2_service_iam_member" "frontend_public" {
   count = var.allow_public_access ? 1 : 0
 
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_service.frontend.name
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-}
-
-resource "google_cloud_run_v2_service_iam_member" "backend_public" {
-  count = var.allow_public_access ? 1 : 0
-
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.backend.name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }

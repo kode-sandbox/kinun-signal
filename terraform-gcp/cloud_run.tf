@@ -159,8 +159,23 @@ resource "google_cloud_run_v2_service" "frontend" {
       }
 
       env {
-        name  = "NEXT_PUBLIC_API_URL"
-        value = google_cloud_run_v2_service.backend.uri
+        name = "BASIC_AUTH_USER"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.app_secrets["basic_auth_user"].secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "BASIC_AUTH_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.app_secrets["basic_auth_password"].secret_id
+            version = "latest"
+          }
+        }
       }
     }
   }
@@ -168,5 +183,7 @@ resource "google_cloud_run_v2_service" "frontend" {
   depends_on = [
     google_project_service.apis["run.googleapis.com"],
     google_cloud_run_v2_service.backend,
+    google_secret_manager_secret_version.app_secret_versions,
+    google_secret_manager_secret_iam_member.frontend_secret_access,
   ]
 }

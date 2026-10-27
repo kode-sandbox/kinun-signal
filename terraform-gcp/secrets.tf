@@ -5,6 +5,8 @@ locals {
     llm_api_key               = var.llm_api_key
     line_channel_access_token = var.line_channel_access_token
     line_user_id              = var.line_user_id
+    basic_auth_user           = var.basic_auth_user
+    basic_auth_password       = var.basic_auth_password
   }
 }
 

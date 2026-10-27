@@ -36,7 +36,19 @@ variable "frontend_image_tag" {
 variable "allow_public_access" {
   type        = bool
   default     = true
-  description = "Whether to allow unauthenticated public HTTP access (allUsers) to Frontend and Backend Cloud Run services"
+  description = "Whether to allow public HTTP access (allUsers) to the Frontend Cloud Run service (protected by Basic Auth). Backend is always restricted to IAM-authenticated internal callers (Frontend SA & Cloud Scheduler SA)."
+}
+
+variable "basic_auth_user" {
+  type        = string
+  default     = "admin"
+  description = "Basic Authentication username for accessing the Frontend dashboard and BFF API"
+}
+
+variable "basic_auth_password" {
+  type        = string
+  sensitive   = true
+  description = "Basic Authentication password for accessing the Frontend dashboard and BFF API"
 }
 
 variable "database_url" {

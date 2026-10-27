@@ -378,6 +378,19 @@ pub async fn run_earnings_check_handler(
     Ok(Json(summary))
 }
 
+#[derive(serde::Serialize)]
+pub struct SystemInfoResponse {
+    pub llm_model: String,
+}
+
+pub async fn get_system_info(
+    State(state): State<Arc<AppState>>,
+) -> ApiResult<Json<SystemInfoResponse>> {
+    Ok(Json(SystemInfoResponse {
+        llm_model: state.config.llm_model.clone(),
+    }))
+}
+
 pub async fn get_alerts(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<Vec<AlertLogRow>>> {

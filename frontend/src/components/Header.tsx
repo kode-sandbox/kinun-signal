@@ -16,6 +16,7 @@ interface HeaderProps {
   onRunEarningsCheck: () => Promise<void>;
   isDailyLoading: boolean;
   isEarningsLoading: boolean;
+  llmModel?: string | null;
 }
 
 export default function Header({
@@ -24,6 +25,7 @@ export default function Header({
   onRunEarningsCheck,
   isDailyLoading,
   isEarningsLoading,
+  llmModel,
 }: HeaderProps) {
   const isAnyJobRunning = isDailyLoading || isEarningsLoading;
 
@@ -42,7 +44,7 @@ export default function Header({
               </h1>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-300">
                 <Cpu className="h-3.5 w-3.5 text-indigo-400" />
-                Powered by argon LLM
+                Powered by {llmModel || "LLM"}
               </span>
             </div>
             <p className="text-xs text-slate-400">
@@ -60,7 +62,7 @@ export default function Header({
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-emerald-950 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
           >
             <Plus className="h-4 w-4" />
-            <span>＋ 銘柄を追加</span>
+            <span>銘柄を追加</span>
           </button>
 
           <button

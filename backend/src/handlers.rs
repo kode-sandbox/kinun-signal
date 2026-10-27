@@ -19,7 +19,7 @@ use crate::{
     dcf::{self, DcfInput},
     models::{
         AddWatchlistRequest, AlertLogRow, JobSummaryResponse, RecalculateRequest,
-        StockDetailResponse, WatchlistItemResponse,
+        StockDetailResponse, UpdateWatchlistRequest, WatchlistItemResponse,
     },
     services::{
         fmp::FmpClient,
@@ -88,14 +88,16 @@ pub async fn add_watchlist(
         ));
     }
 
-    let discount_rate = if req.target_discount_rate > 0.0 {
-        req.target_discount_rate
+    let discount_rate = if req.target_discount_rate.is_finite() {
+        req.target_discount_rate.clamp(-50.0, 80.0)
     } else {
         20.0
     };
 
-    let fin = state.fmp.fetch_financials(&symbol).await;
-    let news = state.fmp.fetch_news(&symbol).await;
+    let (fin, news) = tokio::join!(
+        state.fmp.fetch_financials(&symbol),
+        state.fmp.fetch_news(&symbol)
+    );
 
     let watch_row = db::upsert_watchlist(
         &state.pool,
@@ -140,7 +142,7 @@ pub async fn add_watchlist(
         .map_err(internal_err)?;
 
     let msg = format!(
-        "📊【新規銘柄登録＆理論株価算出】\n銘柄: {} ({})\n現在株価: ${:.2}\n理論株価(Base): ${:.2} (乖離率: {:+.2}%)\n強気(Bull): ${:.2} / 弱気(Bear): ${:.2}\nWACC: {:.1}% / 基本成長率: {:.1}%\n\n📝 推論サマリー:\n{}",
+        "📊【新規銘柄登録＆理論株価算出】\n銘柄: {} ({})\n現在株価: ${:.2}\n理論株価(Base): ${:.2} (乖離率: {:+.2}%)\n強気(Bull): ${:.2} / 弱気(Bear): ${:.2}\nWACC(自走算出): {:.1}% / 基本成長率: {:.1}% / 永久成長率: {:.1}%\n\n📝 推論サマリー:\n{}",
         fin.company_name,
         fin.ticker,
         fin.current_price,
@@ -150,6 +152,7 @@ pub async fn add_watchlist(
         dcf_out.bear_price,
         params.wacc * 100.0,
         params.growth_rate_base * 100.0,
+        params.terminal_growth_rate * 100.0,
         params.reasoning_ja
     );
 
@@ -183,6 +186,27 @@ pub async fn add_watchlist(
     Ok(Json(item))
 }
 
+pub async fn update_watchlist_settings(
+    State(state): State<Arc<AppState>>,
+    Path(ticker): Path<String>,
+    Json(req): Json<UpdateWatchlistRequest>,
+) -> ApiResult<Json<WatchlistItemResponse>> {
+    let symbol = ticker.trim().to_uppercase();
+    let discount_rate = req.target_discount_rate.clamp(-50.0, 80.0);
+
+    let updated_row = db::update_watchlist_discount_rate(&state.pool, &symbol, discount_rate)
+        .await
+        .map_err(internal_err)?
+        .ok_or_else(|| not_found_err(&format!("Ticker {} not found", symbol)))?;
+
+    let item = db::build_watchlist_item_response(&state.pool, &updated_row)
+        .await
+        .map_err(internal_err)?
+        .ok_or_else(|| not_found_err("Failed to load updated watchlist item"))?;
+
+    Ok(Json(item))
+}
+
 pub async fn delete_watchlist(
     State(state): State<Arc<AppState>>,
     Path(ticker): Path<String>,
@@ -209,18 +233,18 @@ pub async fn get_stock_detail(
         .map_err(internal_err)?
         .ok_or_else(|| not_found_err(&format!("Ticker {} not found", symbol)))?;
 
-    let latest_theoretical = db::get_latest_theoretical_price(&state.pool, &symbol)
-        .await
-        .map_err(internal_err)?;
-    let theoretical_history = db::get_theoretical_price_history(&state.pool, &symbol)
-        .await
-        .map_err(internal_err)?;
-    let daily_prices = db::get_daily_prices(&state.pool, &symbol)
-        .await
-        .map_err(internal_err)?;
-    let recent_alerts = db::get_alerts_by_ticker(&state.pool, &symbol)
-        .await
-        .map_err(internal_err)?;
+    let (latest_theoretical, theoretical_history, daily_prices, recent_alerts, fin) = tokio::join!(
+        db::get_latest_theoretical_price(&state.pool, &symbol),
+        db::get_theoretical_price_history(&state.pool, &symbol),
+        db::get_daily_prices(&state.pool, &symbol),
+        db::get_alerts_by_ticker(&state.pool, &symbol),
+        state.fmp.fetch_financials(&symbol),
+    );
+
+    let latest_theoretical = latest_theoretical.map_err(internal_err)?;
+    let theoretical_history = theoretical_history.map_err(internal_err)?;
+    let daily_prices = daily_prices.map_err(internal_err)?;
+    let recent_alerts = recent_alerts.map_err(internal_err)?;
 
     let base_price = latest_theoretical
         .as_ref()
@@ -229,16 +253,50 @@ pub async fn get_stock_detail(
     let current_price = daily_prices
         .first()
         .map(|d| d.close_price)
-        .unwrap_or(base_price);
+        .unwrap_or(fin.current_price);
     let divergence_rate = dcf::calculate_divergence_rate(current_price, base_price);
     let is_undervalued_alert =
         dcf::is_undervalued(current_price, base_price, watchlist.target_discount_rate);
+
+    let auto_params = LlmClient::fallback_dcf_params(&fin);
+    let latest_revenue = fin.revenue_history.first().copied().filter(|&r| r > 0.0);
+    let fcf_for_margin = latest_theoretical
+        .as_ref()
+        .map(|t| t.free_cash_flow)
+        .unwrap_or(fin.free_cash_flow);
+    let fcf_margin = latest_revenue.and_then(|rev| {
+        if rev > 0.0 && fcf_for_margin != 0.0 {
+            Some(dcf::round_three_decimals(fcf_for_margin / rev))
+        } else {
+            None
+        }
+    });
+
+    let implied_growth_rate = latest_theoretical.as_ref().and_then(|tp| {
+        dcf::calculate_implied_growth_rate(
+            current_price,
+            tp.net_cash,
+            0.0,
+            tp.free_cash_flow,
+            tp.shares_outstanding,
+            tp.wacc,
+            tp.terminal_growth_rate,
+        )
+    });
 
     Ok(Json(StockDetailResponse {
         watchlist,
         current_price,
         divergence_rate,
         is_undervalued_alert,
+        implied_growth_rate,
+        auto_wacc: Some(auto_params.wacc),
+        auto_terminal_growth_rate: Some(auto_params.terminal_growth_rate),
+        beta: fin.beta,
+        risk_free_rate: fin.risk_free_rate,
+        effective_tax_rate: fin.effective_tax_rate,
+        latest_revenue,
+        fcf_margin,
         latest_theoretical,
         theoretical_history,
         daily_prices,
@@ -258,17 +316,32 @@ pub async fn recalculate_stock(
         serde_json::from_slice(&body).unwrap_or_default()
     };
 
-    let watchlist = db::get_watchlist_by_ticker(&state.pool, &symbol)
+    let mut watchlist = db::get_watchlist_by_ticker(&state.pool, &symbol)
         .await
         .map_err(internal_err)?
         .ok_or_else(|| not_found_err(&format!("Ticker {} not found", symbol)))?;
+
+    if let Some(new_discount_rate) = req.custom_target_discount_rate {
+        if new_discount_rate.is_finite() {
+            let clamped = new_discount_rate.clamp(-50.0, 80.0);
+            if let Some(updated) =
+                db::update_watchlist_discount_rate(&state.pool, &symbol, clamped)
+                    .await
+                    .map_err(internal_err)?
+            {
+                watchlist = updated;
+            }
+        }
+    }
 
     let prev_tp = db::get_latest_theoretical_price(&state.pool, &symbol)
         .await
         .map_err(internal_err)?;
 
-    let fin = state.fmp.fetch_financials(&symbol).await;
-    let news = state.fmp.fetch_news(&symbol).await;
+    let (fin, news) = tokio::join!(
+        state.fmp.fetch_financials(&symbol),
+        state.fmp.fetch_news(&symbol)
+    );
 
     let has_custom_override = req.custom_wacc.is_some()
         || req.custom_growth_rate_base.is_some()
@@ -299,10 +372,24 @@ pub async fn recalculate_stock(
             .unwrap_or_else(|| (base_ref.growth_rate_bull + delta).max(growth_rate_base + 0.02));
         let growth_rate_bear = req
             .custom_growth_rate_bear
-            .unwrap_or_else(|| (base_ref.growth_rate_bear + delta).min(growth_rate_base - 0.02).max(0.0));
+            .unwrap_or_else(|| {
+                (base_ref.growth_rate_bear + delta)
+                    .min(growth_rate_base - 0.02)
+                    .max(0.0)
+            });
         let terminal_growth_rate = req
             .custom_terminal_growth_rate
             .unwrap_or(base_ref.terminal_growth_rate);
+
+        // Strip previous manual header if present so it doesn't stack infinitely
+        let clean_prev_reasoning = if let Some(idx) = base_ref.reasoning_ja.find("【Yahoo Finance")
+        {
+            &base_ref.reasoning_ja[idx..]
+        } else if let Some(idx) = base_ref.reasoning_ja.find("【推論レポート】") {
+            &base_ref.reasoning_ja[idx..]
+        } else {
+            base_ref.reasoning_ja.as_str()
+        };
 
         LlmDcfParams {
             wacc,
@@ -311,10 +398,11 @@ pub async fn recalculate_stock(
             growth_rate_bear,
             terminal_growth_rate,
             reasoning_ja: format!(
-                "【手動カスタム前提シミュレーション (WACC: {:.1}%, 基本成長率: {:.1}%)】\n{}",
+                "【手動カスタム前提シミュレーション (WACC: {:.1}%, 基本成長率: {:.1}%, 永久成長率: {:.1}%)】\n{}",
                 wacc * 100.0,
                 growth_rate_base * 100.0,
-                base_ref.reasoning_ja
+                terminal_growth_rate * 100.0,
+                clean_prev_reasoning
             ),
         }
     } else {
@@ -488,17 +576,10 @@ pub async fn execute_earnings_check(
         let news = state.fmp.fetch_news(&w.ticker).await;
         let params = state.llm.infer_dcf_parameters(&fin, &news).await;
 
-        // If force is triggered in mock mode, simulate a realistic post-earnings FCF bump (+4.5%) so the before/after comparison is clearly visible
-        let updated_fcf = if force && state.config.is_fmp_mock() {
-            (fin.free_cash_flow * 1.045).round()
-        } else {
-            fin.free_cash_flow
-        };
-
         let dcf_input = DcfInput {
             cash_and_equivalents: fin.cash_and_short_term_investments,
             total_debt: fin.total_debt,
-            free_cash_flow: updated_fcf,
+            free_cash_flow: fin.free_cash_flow,
             shares_outstanding: fin.shares_outstanding,
             wacc: params.wacc,
             growth_rate_base: params.growth_rate_base,
@@ -513,35 +594,52 @@ pub async fn execute_earnings_check(
             &w.ticker,
             "EARNINGS_UPDATE",
             &dcf_out,
-            updated_fcf,
+            fin.free_cash_flow,
             fin.shares_outstanding,
             &params,
         )
         .await?;
 
-        let earnings_date = fin.latest_earnings_date.unwrap_or(today);
-        db::update_watchlist_earnings_date(&state.pool, &w.ticker, earnings_date).await?;
+        if let Some(earnings_date) = fin.latest_earnings_date {
+            db::update_watchlist_earnings_date(&state.pool, &w.ticker, earnings_date).await?;
+        }
 
         let div_rate = dcf::calculate_divergence_rate(fin.current_price, dcf_out.base_price);
         db::upsert_daily_price(&state.pool, &w.ticker, today, fin.current_price, div_rate).await?;
 
-        let eps_actual = fin.eps_actual.unwrap_or(0.0);
-        let eps_est = fin.eps_estimated.unwrap_or(0.0);
-        let beat_pct = if eps_est > 0.0 {
-            ((eps_actual - eps_est) / eps_est) * 100.0
+        // Build earnings metadata lines ONLY from fields actually obtained from Yahoo Finance / FMP
+        let mut meta_lines = Vec::new();
+        if let Some(ed) = fin.latest_earnings_date {
+            meta_lines.push(format!("直近決算期末日: {}", ed));
+        }
+        match (fin.eps_actual, fin.eps_estimated) {
+            (Some(actual), Some(est)) if est > 0.0 => {
+                let beat_pct = ((actual - est) / est) * 100.0;
+                meta_lines.push(format!(
+                    "EPS実績: ${:.2} vs 予想: ${:.2} (サプライズ: {:+.1}%)",
+                    actual, est, beat_pct
+                ));
+            }
+            (Some(actual), _) => {
+                meta_lines.push(format!("直近四半期希薄化後EPS実績: ${:.2}", actual));
+            }
+            _ => {}
+        }
+
+        let meta_section = if meta_lines.is_empty() {
+            String::new()
         } else {
-            0.0
+            format!("{}\n", meta_lines.join("\n"))
         };
 
         let price_diff = dcf_out.base_price - old_base;
         let earnings_msg = format!(
-            "📊【四半期決算速報＆理論株価アップデート】{} ({})\n決算発表日: {}\nEPS実績: ${:.2} vs 予想: ${:.2} (サプライズ: {:+.1}%)\n\n🔄 理論株価の再計算結果:\n旧Base理論株価: ${:.2} ➔ 新Base理論株価: ${:.2} ({:+.2}$)\n新Bull: ${:.2} / 新Bear: ${:.2}\n現在株価: ${:.2} (新乖離率: {:+.2}%)",
+            "📊【四半期決算＆理論株価アップデート】{} ({})\n{}\n🔄 理論株価の再計算結果 (WACC {:.1}% / 永久成長率 {:.1}%):\n旧Base理論株価: ${:.2} ➔ 新Base理論株価: ${:.2} ({:+.2}$)\n新Bull: ${:.2} / 新Bear: ${:.2}\n現在株価: ${:.2} (新乖離率: {:+.2}%)",
             w.company_name,
             w.ticker,
-            earnings_date,
-            eps_actual,
-            eps_est,
-            beat_pct,
+            meta_section,
+            params.wacc * 100.0,
+            params.terminal_growth_rate * 100.0,
             old_base,
             dcf_out.base_price,
             price_diff,

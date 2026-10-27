@@ -5,6 +5,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   ChevronRight,
+  Scale,
   Sparkles,
   Target,
 } from "lucide-react";
@@ -34,6 +35,11 @@ export default function StockCard({ stock, onSelect }: StockCardProps) {
       ? `${stock.reasoning_ja.slice(0, 100)}...`
       : stock.reasoning_ja;
 
+  const discountLabel =
+    stock.target_discount_rate >= 0
+      ? `目標割安率 -${stock.target_discount_rate.toFixed(0)}%`
+      : `許容プレミアム +${Math.abs(stock.target_discount_rate).toFixed(0)}%`;
+
   return (
     <div
       onClick={() => onSelect(stock.ticker)}
@@ -60,7 +66,7 @@ export default function StockCard({ stock, onSelect }: StockCardProps) {
                 {stock.ticker}
               </span>
               <span className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
-                目標割安率 -{stock.target_discount_rate.toFixed(0)}%
+                {discountLabel}
               </span>
             </div>
             <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400 line-clamp-1">
@@ -105,7 +111,7 @@ export default function StockCard({ stock, onSelect }: StockCardProps) {
         <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800/90 dark:bg-slate-950/60">
           <div>
             <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              現在株価 (Close)
+              現在株価 (Yahoo Live)
             </span>
             <div className="mt-0.5 font-mono text-xl font-bold text-slate-900 dark:text-slate-100">
               ${stock.current_price.toFixed(2)}
@@ -113,7 +119,7 @@ export default function StockCard({ stock, onSelect }: StockCardProps) {
           </div>
           <div className="border-l border-slate-200 pl-3 dark:border-slate-800">
             <span className="text-[11px] font-medium uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
-              理論株価 (Base DCF)
+              理論株価 (10Y 3段階DCF)
             </span>
             <div className="mt-0.5 font-mono text-xl font-bold text-indigo-600 dark:text-emerald-400">
               ${stock.base_price.toFixed(2)}
@@ -121,13 +127,33 @@ export default function StockCard({ stock, onSelect }: StockCardProps) {
           </div>
         </div>
 
+        {/* Reverse DCF Implied Growth vs Model Growth Comparison */}
+        {stock.implied_growth_rate != null && (
+          <div className="mt-2.5 flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/50 px-3 py-1.5 text-[11px] dark:border-slate-800/80 dark:bg-slate-950/40">
+            <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
+              <Scale className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
+              市場織り込み成長率 (逆算DCF)
+            </span>
+            <span className="font-mono font-bold text-slate-900 dark:text-slate-200">
+              {stock.implied_growth_rate >= 0 ? "+" : ""}
+              {(stock.implied_growth_rate * 100).toFixed(1)}%/年{" "}
+              <span className="font-normal text-slate-500 dark:text-slate-400">
+                (推計: {(stock.growth_rate_base * 100).toFixed(1)}%)
+              </span>
+            </span>
+          </div>
+        )}
+
         {/* 3-Bar Scenario Visualization (Bull / Base / Bear) */}
-        <div className="mt-4 space-y-2">
+        <div className="mt-3.5 space-y-2">
           <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
             <span>DCF シナリオレンジ</span>
             <span className="font-mono text-slate-500 dark:text-slate-400">
-              WACC {(stock.wacc * 100).toFixed(1)}% | 成長率{" "}
+              WACC {(stock.wacc * 100).toFixed(1)}% | 成長{" "}
               {(stock.growth_rate_base * 100).toFixed(1)}%
+              {stock.terminal_growth_rate != null
+                ? ` | 永久 ${(stock.terminal_growth_rate * 100).toFixed(1)}%`
+                : ""}
             </span>
           </div>
 
@@ -189,7 +215,7 @@ export default function StockCard({ stock, onSelect }: StockCardProps) {
             算出根拠プレビュー
           </span>
           <span className="inline-flex items-center text-slate-500 group-hover:text-indigo-600 dark:text-slate-400 dark:group-hover:text-emerald-400">
-            詳細・DCF再計算
+            詳細・割安率変更・再計算
             <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </span>
         </div>

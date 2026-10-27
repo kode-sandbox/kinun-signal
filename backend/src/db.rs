@@ -87,6 +87,26 @@ pub async fn update_watchlist_earnings_date(
     Ok(())
 }
 
+pub async fn update_watchlist_discount_rate(
+    pool: &PgPool,
+    ticker: &str,
+    target_discount_rate: f64,
+) -> anyhow::Result<Option<WatchlistRow>> {
+    let row = sqlx::query_as::<_, WatchlistRow>(
+        r#"
+        UPDATE watchlists
+        SET target_discount_rate = $2, updated_at = NOW()
+        WHERE ticker = $1
+        RETURNING ticker, company_name, target_discount_rate, last_earnings_date, created_at, updated_at
+        "#,
+    )
+    .bind(ticker)
+    .bind(target_discount_rate)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
 pub async fn delete_watchlist(pool: &PgPool, ticker: &str) -> anyhow::Result<bool> {
     let res = sqlx::query("DELETE FROM watchlists WHERE ticker = $1")
         .bind(ticker)
@@ -337,6 +357,15 @@ pub async fn build_watchlist_item_response(
     let divergence_rate = dcf::calculate_divergence_rate(current_price, tp.base_price);
     let is_undervalued_alert =
         dcf::is_undervalued(current_price, tp.base_price, w.target_discount_rate);
+    let implied_growth_rate = dcf::calculate_implied_growth_rate(
+        current_price,
+        tp.net_cash,
+        0.0,
+        tp.free_cash_flow,
+        tp.shares_outstanding,
+        tp.wacc,
+        tp.terminal_growth_rate,
+    );
 
     Ok(Some(WatchlistItemResponse {
         ticker: w.ticker.clone(),
@@ -353,6 +382,7 @@ pub async fn build_watchlist_item_response(
         growth_rate_bull: tp.growth_rate_bull,
         growth_rate_bear: tp.growth_rate_bear,
         terminal_growth_rate: tp.terminal_growth_rate,
+        implied_growth_rate,
         net_cash: tp.net_cash,
         free_cash_flow: tp.free_cash_flow,
         shares_outstanding: tp.shares_outstanding,
@@ -371,9 +401,54 @@ pub async fn seed_initial_data_if_empty(
     let existing = get_all_watchlists(pool).await?;
     if !existing.is_empty() {
         info!(
-            "Database already has {} watchlist stocks. Skipping initial seed.",
+            "Database already has {} watchlist stocks. Checking if legacy DCF records need upgrade to Yahoo Finance + CAPM 10Y DCF...",
             existing.len()
         );
+        let today = Utc::now().date_naive();
+        for w in &existing {
+            let needs_upgrade = match get_latest_theoretical_price(pool, &w.ticker).await? {
+                Some(tp) => !tp.reasoning_ja.contains("CAPM"),
+                None => true,
+            };
+            if needs_upgrade {
+                info!("Upgrading valuation for existing stock {} with live Yahoo Finance data...", w.ticker);
+                let fin = fmp.fetch_financials(&w.ticker).await;
+                let news = fmp.fetch_news(&w.ticker).await;
+                upsert_watchlist(
+                    pool,
+                    &fin.ticker,
+                    &fin.company_name,
+                    w.target_discount_rate,
+                    fin.latest_earnings_date,
+                )
+                .await?;
+                let params = llm.infer_dcf_parameters(&fin, &news).await;
+                let dcf_input = DcfInput {
+                    cash_and_equivalents: fin.cash_and_short_term_investments,
+                    total_debt: fin.total_debt,
+                    free_cash_flow: fin.free_cash_flow,
+                    shares_outstanding: fin.shares_outstanding,
+                    wacc: params.wacc,
+                    growth_rate_base: params.growth_rate_base,
+                    growth_rate_bull: params.growth_rate_bull,
+                    growth_rate_bear: params.growth_rate_bear,
+                    terminal_growth_rate: params.terminal_growth_rate,
+                };
+                let dcf_out = dcf::calculate(&dcf_input);
+                insert_theoretical_price(
+                    pool,
+                    &fin.ticker,
+                    "INITIAL",
+                    &dcf_out,
+                    fin.free_cash_flow,
+                    fin.shares_outstanding,
+                    &params,
+                )
+                .await?;
+                let div_rate = dcf::calculate_divergence_rate(fin.current_price, dcf_out.base_price);
+                upsert_daily_price(pool, &fin.ticker, today, fin.current_price, div_rate).await?;
+            }
+        }
         return Ok(());
     }
 

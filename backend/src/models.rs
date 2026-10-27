@@ -67,6 +67,7 @@ pub struct WatchlistItemResponse {
     pub growth_rate_bull: f64,
     pub growth_rate_bear: f64,
     pub terminal_growth_rate: f64,
+    pub implied_growth_rate: Option<f64>,
     pub net_cash: f64,
     pub free_cash_flow: f64,
     pub shares_outstanding: f64,
@@ -87,11 +88,24 @@ pub struct AddWatchlistRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateWatchlistRequest {
+    pub target_discount_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StockDetailResponse {
     pub watchlist: WatchlistRow,
     pub current_price: f64,
     pub divergence_rate: f64,
     pub is_undervalued_alert: bool,
+    pub implied_growth_rate: Option<f64>,
+    pub auto_wacc: Option<f64>,
+    pub auto_terminal_growth_rate: Option<f64>,
+    pub beta: Option<f64>,
+    pub risk_free_rate: Option<f64>,
+    pub effective_tax_rate: Option<f64>,
+    pub latest_revenue: Option<f64>,
+    pub fcf_margin: Option<f64>,
     pub latest_theoretical: Option<TheoreticalPriceRow>,
     pub theoretical_history: Vec<TheoreticalPriceRow>,
     pub daily_prices: Vec<DailyPriceRow>,
@@ -105,6 +119,7 @@ pub struct RecalculateRequest {
     pub custom_growth_rate_bull: Option<f64>,
     pub custom_growth_rate_bear: Option<f64>,
     pub custom_terminal_growth_rate: Option<f64>,
+    pub custom_target_discount_rate: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

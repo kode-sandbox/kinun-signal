@@ -4,7 +4,6 @@ import React from "react";
 import {
   Activity,
   BarChart3,
-  Cpu,
   Loader2,
   Moon,
   Plus,
@@ -49,10 +48,6 @@ export default function Header({
               <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-xl">
                 Personal Stock Analyst
               </h1>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300">
-                <Cpu className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                Powered by {llmModel || "argon LLM"}
-              </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Institutional DCF Valuation &amp; Automated LINE Equity Alert Terminal

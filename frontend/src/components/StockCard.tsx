@@ -186,7 +186,7 @@ export default function StockCard({ stock, onSelect }: StockCardProps) {
         <div className="mb-1 flex items-center justify-between text-[11px] font-medium text-indigo-600 dark:text-indigo-300">
           <span className="inline-flex items-center gap-1">
             <Sparkles className="h-3 w-3 text-indigo-500 dark:text-indigo-400" />
-            argon 算出根拠プレビュー
+            算出根拠プレビュー
           </span>
           <span className="inline-flex items-center text-slate-500 group-hover:text-indigo-600 dark:text-slate-400 dark:group-hover:text-emerald-400">
             詳細・DCF再計算

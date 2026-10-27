@@ -105,6 +105,7 @@ export default function DashboardPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [sortBy, setSortBy] = useState<"registered" | "cheapest" | "name">("registered");
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("psa-theme");
@@ -131,6 +132,17 @@ export default function DashboardPage() {
       setToastMessage((prev) => (prev === msg ? null : prev));
     }, 5500);
   }, []);
+
+// Sort watchlist
+  const sortedWatchlist = [...watchlist].sort((a, b) => {
+    if (sortBy === "cheapest") {
+      return a.divergence_rate - b.divergence_rate;
+    }
+    if (sortBy === "name") {
+      return a.company_name.localeCompare(b.company_name);
+    }
+    return 0; // Default to registered order
+  });
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -463,14 +475,15 @@ export default function DashboardPage() {
                   カードをクリックすると財務基礎データ・算出根拠全文・WACCスライダー再計算モーダルが開きます
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={fetchDashboardData}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:shadow-none dark:hover:border-slate-700 dark:hover:text-white"
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:shadow-none dark:focus:border-emerald-500/50"
               >
-                <RefreshCcw className="h-3.5 w-3.5" />
-                <span>更新</span>
-              </button>
+                <option value="registered">登録順</option>
+                <option value="cheapest">割安な順</option>
+                <option value="name">名前順</option>
+              </select>
             </div>
 
             {isInitialLoading ? (
@@ -491,7 +504,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {watchlist.map((stock) => (
+                {sortedWatchlist.map((stock) => (
                   <StockCard
                     key={stock.ticker}
                     stock={stock}
@@ -503,7 +516,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Right Column (Width 1/3): LINE Notification & Alert History Timeline */}
-          <div className="flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-xl">
+          <div className="flex flex-col h-fit rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-xl">
             {/* LINE Chat Header */}
             <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3.5 dark:border-slate-800 dark:bg-[#06C755]/10">
               <div className="flex items-center gap-2.5">
@@ -526,7 +539,7 @@ export default function DashboardPage() {
             </div>
 
             {/* LINE Talk Timeline Messages */}
-            <div className="max-h-[680px] flex-1 space-y-3.5 overflow-y-auto p-4">
+            <div className="flex-1 space-y-3.5 overflow-y-auto p-4">
               {alerts.length === 0 ? (
                 <div className="py-12 text-center text-xs text-slate-500">
                   まだLINE通知履歴はありません。上の「🔄

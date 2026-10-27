@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Personal Stock Analyst | Powered by argon LLM",
+  title: "Personal Stock Analyst | Powered by LLM",
   description:
     "米国株DCF理論株価算出・日次割安アラート・英語ニュース3行要約・四半期決算自動再計算ターミナル",
 };

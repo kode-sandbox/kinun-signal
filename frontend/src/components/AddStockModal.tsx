@@ -135,12 +135,12 @@ export default function AddStockModal({
               disabled={isSubmitting}
               className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-200 accent-emerald-500 dark:bg-slate-800"
             />
-            <div className="mt-1 flex justify-between font-mono text-[10px] text-slate-500">
-              <span>5%</span>
-              <span>15%</span>
-              <span>20% (推奨)</span>
-              <span>30%</span>
-              <span>40%</span>
+            <div className="relative mt-2 h-4 font-mono text-[10px] text-slate-500">
+              <span className="absolute left-[0%] top-0 -translate-x-0">5%</span>
+              <span className="absolute left-[28.5%] top-0 -translate-x-1/2">15%</span>
+              <span className="absolute left-[42.8%] top-0 -translate-x-1/2">20% (推奨)</span>
+              <span className="absolute left-[71.4%] top-0 -translate-x-1/2">30%</span>
+              <span className="absolute left-[100%] top-0 -translate-x-full">40%</span>
             </div>
           </div>
 

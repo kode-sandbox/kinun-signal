@@ -97,6 +97,7 @@ const FALLBACK_ALERTS: AlertLog[] = [
 export default function DashboardPage() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [alerts, setAlerts] = useState<AlertLog[]>([]);
+  const [llmModel, setLlmModel] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isDailyLoading, setIsDailyLoading] = useState<boolean>(false);
   const [isEarningsLoading, setIsEarningsLoading] = useState<boolean>(false);
@@ -133,9 +134,10 @@ export default function DashboardPage() {
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      const [wRes, aRes] = await Promise.all([
+      const [wRes, aRes, sysRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/watchlist`, { cache: "no-store" }),
         fetch(`${API_BASE_URL}/api/alerts`, { cache: "no-store" }),
+        fetch(`${API_BASE_URL}/api/system/info`, { cache: "no-store" }).catch(() => null),
       ]);
 
       if (!wRes.ok || !aRes.ok) {
@@ -146,6 +148,13 @@ export default function DashboardPage() {
       const aData: AlertLog[] = await aRes.json();
       setWatchlist(wData);
       setAlerts(aData);
+
+      if (sysRes && sysRes.ok) {
+        const sysData = await sysRes.json();
+        if (sysData.llm_model) {
+          setLlmModel(sysData.llm_model);
+        }
+      }
     } catch {
       // Fallback to realistic seeded state if backend is not yet started
       setWatchlist((prev) => (prev.length > 0 ? prev : FALLBACK_WATCHLIST));
@@ -357,6 +366,7 @@ export default function DashboardPage() {
         isEarningsLoading={isEarningsLoading}
         theme={theme}
         onToggleTheme={handleToggleTheme}
+        llmModel={llmModel}
       />
 
       {/* Toast Banner */}

@@ -12,7 +12,7 @@
 ---
 
 ## 1. システム概要
-ウォッチしている米国株の財務データを外部API（Financial Modeling Prep）から取得し、LLM（モデル名: `argon`）を用いて将来の成長率・割引率を推論させた上で、Rust側で厳密なDCF法（資産価値＋事業価値）による理論株価を算出する。また、日次の終値監視による割安アラート、ニュースの日本語3行要約、四半期決算の速報と理論株価の自動再計算を行い、LINEへ通知する自分専用の証券マンアプリ。
+ウォッチしている米国株の財務データを外部API（Financial Modeling Prep）から取得し、LLMを用いて将来の成長率・割引率を推論させた上で、Rust側で厳密なDCF法（資産価値＋事業価値）による理論株価を算出する。また、日次の終値監視による割安アラート、ニュースの日本語3行要約、四半期決算の速報と理論株価の自動再計算を行い、LINEへ通知する自分専用の証券マンアプリ。
 
 ---
 
@@ -273,10 +273,10 @@ pub struct StockNewsItem {
   * 決算サプライズ: `GET /api/v3/earnings-surprises/{ticker}?apikey={key}` (`date`, `actualEarningResult`, `estimatedEarning`)
   * ニュース: `GET /api/v3/stock_news?tickers={ticker}&limit=5&apikey={key}` (`title`, `publishedDate`, `text`, `url`)
 
-#### B. LLM (`argon`) クライアント (`services/llm.rs`)
+#### B. LLM クライアント (`services/llm.rs`)
 * リクエスト先: `POST {LLM_API_BASE_URL}/chat/completions`
 * ヘッダー: `Authorization: Bearer {LLM_API_KEY}`
-* リクエストボディの `"model"` フィールドには必ず環境変数 `LLM_MODEL`（デフォルト `"argon"`）をセットすること。
+* リクエストボディの `"model"` フィールドには環境変数 `LLM_MODEL` をセットすること。
 * `LLM_API_KEY` が `"mock_llm_key"` または空の場合（およびAPI通信失敗時）は、財務データの過去FCF成長率から妥当な数値を自動算出したフォールバック値を返すこと。
 
 **① DCFパラメータ推論プロンプト**:
@@ -351,7 +351,7 @@ pub struct StockNewsItem {
   ※ `is_undervalued_alert` の判定式: `current_price <= base_price * (1.0 - target_discount_rate / 100.0)`
 
 #### 2. `POST /api/watchlist`
-銘柄を新規登録し、即座にFMPデータ取得 → LLM (`argon`) パラメータ推論 → DCF計算 → DB保存 → 初回LINE通知までを一気通貫で実行する。
+銘柄を新規登録し、即座にFMPデータ取得 → LLM パラメータ推論 → DCF計算 → DB保存 → 初回LINE通知までを一気通貫で実行する。
 * **Request JSON**:
   ```json
   {
@@ -363,7 +363,7 @@ pub struct StockNewsItem {
   1. `ticker` を大文字化・トリム。
   2. FMPから財務データ・現在株価・ニュースを取得。
   3. `watchlists` テーブルにINSERT（既存ならUPDATE）。
-  4. LLM (`argon`) でDCFパラメータを推論。
+  4. LLM でDCFパラメータを推論。
   5. `dcf::calculate` で理論株価を算出し、`theoretical_prices` テーブルに `trigger_type = 'INITIAL'` でINSERT。
   6. `daily_prices` テーブルに当日終値と乖離率をINSERT（UPSERT）。
   7. LINEに「📊【新規銘柄登録＆理論株価算出】」を通知し、`alert_logs` に保存。
@@ -401,7 +401,7 @@ pub struct StockNewsItem {
   ```
 
 #### 5. `POST /api/stocks/:ticker/recalculate`
-理論株価の再計算を実行する。リクエストボディに手動オーバーライド用のパラメータが含まれている場合はそれを使用し、空（または省略）の場合はLLM (`argon`) に再推論させる。
+理論株価の再計算を実行する。リクエストボディに手動オーバーライド用のパラメータが含まれている場合はそれを使用し、空（または省略）の場合はLLM に再推論させる。
 * **Request JSON**:
   ```json
   {
@@ -417,7 +417,7 @@ pub struct StockNewsItem {
   1. 全ウォッチ銘柄を取得。
   2. 各銘柄の最新終値を取得し、`daily_prices` に保存。
   3. `終値 <= base_price * (1.0 - target_discount_rate / 100.0)` を満たす場合、LINEへ「🚨【割安アラート】{ticker} が理論株価({base_price}$)から{乖離率}%割安の {終値}$ に到達しました！」と通知。
-  4. 各銘柄のニュースを取得し、LLM (`argon`) で日本語3行要約を作成してLINEへ「📰【モーニングニュース要約】」を通知。
+  4. 各銘柄のニュースを取得し、LLM で日本語3行要約を作成してLINEへ「📰【モーニングニュース要約】」を通知。
   5. 実行結果サマリー（処理銘柄数、発火アラート数、生成されたメッセージ一覧）をJSONで返す。
 
 #### 7. `POST /api/jobs/earnings-check`
@@ -426,7 +426,7 @@ pub struct StockNewsItem {
   1. 全ウォッチ銘柄についてFMPの決算サプライズ情報を取得。
   2. `watchlists.last_earnings_date` と比較し、新しい決算日が存在する場合（またはテスト用に `force: true` クエリパラメータが渡された場合）：
      * 決算速報（EPS実績 vs 予想）をLINE通知。
-     * 新しい財務データでLLM (`argon`) 推論 → DCF計算を再実行し、`trigger_type = 'EARNINGS_UPDATE'` で `theoretical_prices` に保存。
+     * 新しい財務データでLLM 推論 → DCF計算を再実行し、`trigger_type = 'EARNINGS_UPDATE'` で `theoretical_prices` に保存。
      * 新旧の理論株価比較をLINE通知し、`watchlists.last_earnings_date` を更新。
   3. 実行結果サマリーをJSONで返す。
 
@@ -451,7 +451,7 @@ Next.js (App Router) + TypeScript + Tailwind CSS + `lucide-react` で実装す�
 1画面で全ての状況把握と操作が完結するダッシュボードを構築すること。
 
 1. **トップナビゲーションバー (`Header.tsx`)**:
-   * サービスロゴ: `Personal Stock Analyst` + サブバッジ `Powered by argon LLM`
+   * サービスロゴ: `Personal Stock Analyst`
    * アクションボタン群（ローディング中はスピナーを表示しボタンを無効化すること）:
      * `＋ 銘柄を追加` ボタン（クリックで銘柄追加モーダルを開く）
      * `🔄 日次監視＆ニュース要約を実行` ボタン（`POST /api/jobs/daily-check` を叩き、完了トーストを表示）
@@ -465,13 +465,13 @@ Next.js (App Router) + TypeScript + Tailwind CSS + `lucide-react` で実装す�
      * 各銘柄のカードを表示。
      * 表示項目：ティッカー、企業名、現在株価、理論株価（Base / Bull / Bear の3バー表示）、現在値とBase理論株価の乖離率バッジ。
      * もし `is_undervalued_alert == true`（目標割安率以上に割安）なら、カードの枠線をエメラルドグリーンで光らせ、`🎯 買い圏内 (目標割安率達成)` バッジを表示。
-     * LLM (`argon`) による算出根拠の先頭100文字プレビュー。
+     * LLM による算出根拠の先頭100文字プレビュー。
      * カードクリックで `StockDetailModal` を開く。
    * **右カラム（幅 1/3）：LINE通知＆アラート履歴タイムライン**
      * `GET /api/alerts` から取得した通知ログをLINEのトーク画面風のUIでリアルタイム表示する。
      * これにより、ローカル環境でLINE APIキーを設定する前でも、どんなLINE通知（割安アラート・日本語3行ニュース要約・決算速報）が飛んだかを画面上で一目で確認できる。
 4. **銘柄詳細＆DCFシミュレーターモーダル (`StockDetailModal.tsx`)**:
-   * LLM (`argon`) が生成した日本語の算出根拠レポート全文。
+   * LLM が生成した日本語の算出根拠レポート全文。
    * 財務基礎データ（ネットキャッシュ、直近FCF、発行済株式数）のフォーマット表示（十億ドル＝`$XX.XB` 表記）。
    * **インタラクティブDCF再計算機能**:
      * WACC（割引率）とBase成長率をスライダー（または数値入力）で変更し、「この前提で理論株価を再計算」ボタンを押すと `POST /api/stocks/:ticker/recalculate` を叩いてDBを更新できる機能。

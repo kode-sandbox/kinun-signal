@@ -4,7 +4,6 @@ import React from "react";
 import {
   Activity,
   BarChart3,
-  Cpu,
   Loader2,
   Moon,
   Plus,
@@ -49,10 +48,6 @@ export default function Header({
               <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-xl">
                 Personal Stock Analyst
               </h1>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300">
-                <Cpu className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                Powered by {llmModel || "argon LLM"}
-              </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Institutional DCF Valuation &amp; Automated LINE Equity Alert Terminal
@@ -68,22 +63,20 @@ export default function Header({
               onClick={onToggleTheme}
               title={
                 isDark
-                  ? "ホワイトベース（ライトモード）に切り替え"
-                  : "ブラックベース（ダークモード）に切り替え"
+                  ? "ホワイト画面へ切り替え"
+                  : "ブラック画面へ切り替え"
               }
-              aria-label="画面テーマ切り替え"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:shadow-none dark:hover:border-slate-600 dark:hover:bg-slate-800 sm:text-sm"
+              aria-label={
+                isDark
+                  ? "ホワイト画面へ切り替え"
+                  : "ブラック画面へ切り替え"
+              }
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:shadow-none dark:hover:border-slate-600 dark:hover:bg-slate-800"
             >
               {isDark ? (
-                <>
-                  <Sun className="h-4 w-4 text-amber-400" />
-                  <span>ホワイト画面へ切替</span>
-                </>
+                <Sun className="h-4 w-4 text-amber-400" />
               ) : (
-                <>
-                  <Moon className="h-4 w-4 text-slate-700" />
-                  <span>ブラック画面へ切替</span>
-                </>
+                <Moon className="h-4 w-4 text-slate-700" />
               )}
             </button>
           )}

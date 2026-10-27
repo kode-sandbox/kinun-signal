@@ -3,7 +3,7 @@
 ## Overview
 This monorepo implements a personal stock analyst application that:
 - Retrieves US‑stock financial data from **Financial Modeling Prep** (FMP).
-- Uses the **argon** LLM to infer DCF parameters.
+- Uses an LLM to infer DCF parameters.
 - Calculates a theoretical price via a **Discounted Cash Flow (DCF)** model.
 - Stores data in PostgreSQL, exposes a REST API (Axum), and provides a Next.js frontend.
 - Runs daily and earnings batch jobs and sends notifications through **LINE** (or logs when mock).
@@ -60,7 +60,7 @@ All functionality follows the strict specifications in `AGENTS.md` and works on 
 | `FMP_API_KEY` | Financial Modeling Prep API key. | `mock_fmp_key` (triggers realistic mock data) |
 | `LLM_API_BASE_URL` | Base URL of LLM endpoint. | `https://api.openai.com/v1` |
 | `LLM_API_KEY` | LLM API key. | `mock_llm_key` (mock fallback) |
-| `LLM_MODEL` | Model name – defaults to `argon`. | `argon` |
+| `LLM_MODEL` | Model name (e.g. gpt-4o-mini). | `argon` |
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API token. | `mock_line_token` (logs to console) |
 | `LINE_USER_ID` | Target LINE user ID. | `mock_line_user_id` |
 

@@ -424,7 +424,7 @@ pub async fn seed_initial_data_if_empty(
         upsert_daily_price(pool, &fin.ticker, today, fin.current_price, div_rate).await?;
 
         let init_msg = format!(
-            "📊【新規銘柄登録＆理論株価算出】\n銘柄: {} ({})\n現在株価: ${:.2}\n理論株価(Base): ${:.2} (乖離率: {:+.2}%)\n強気(Bull): ${:.2} / 弱気(Bear): ${:.2}\nWACC: {:.1}% / 基本成長率: {:.1}%\n\n📝 argon推論サマリー:\n{}",
+            "📊【新規銘柄登録＆理論株価算出】\n銘柄: {} ({})\n現在株価: ${:.2}\n理論株価(Base): ${:.2} (乖離率: {:+.2}%)\n強気(Bull): ${:.2} / 弱気(Bear): ${:.2}\nWACC: {:.1}% / 基本成長率: {:.1}%\n\n📝 推論サマリー:\n{}",
             fin.company_name,
             fin.ticker,
             fin.current_price,

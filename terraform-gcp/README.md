@@ -24,7 +24,7 @@ graph LR
 
     subgraph External["External APIs"]
         FMP["FMP API"]
-        LLM["LLM API (argon)"]
+        LLM["LLM API"]
         LINE["LINE Messaging API"]
     end
 

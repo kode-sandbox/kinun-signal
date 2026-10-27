@@ -150,7 +150,7 @@ export default function AddStockModal({
               <span>登録時の自動パイプライン処理</span>
             </div>
             <p className="leading-relaxed text-slate-600 dark:text-slate-300">
-              FMP財務データ取得 ➔ LLM (<strong>argon</strong>) で成長率・WACC推論
+              FMP財務データ取得 ➔ LLMで成長率・WACC推論
               ➔ DCF理論株価算出 ➔ LINEへ初回分析レポート通知まで自動実行します。
             </p>
           </div>
@@ -178,7 +178,7 @@ export default function AddStockModal({
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>argon 推論＆DCF算出中...</span>
+                  <span>推論＆DCF算出中...</span>
                 </>
               ) : (
                 <>

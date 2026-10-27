@@ -157,7 +157,7 @@ export default function StockCard({ stock, onSelect }: StockCardProps) {
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
               <div
-                className="h-full rounded-full bg-slate-800 dark:bg-gradient-to-r dark:from-emerald-500 dark:to-emerald-400"
+                className="h-full rounded-full bg-emerald-500 dark:bg-gradient-to-r dark:from-emerald-500 dark:to-emerald-400"
                 style={{ width: `${baseWidth}%` }}
               />
             </div>
@@ -186,7 +186,7 @@ export default function StockCard({ stock, onSelect }: StockCardProps) {
         <div className="mb-1 flex items-center justify-between text-[11px] font-medium text-indigo-600 dark:text-indigo-300">
           <span className="inline-flex items-center gap-1">
             <Sparkles className="h-3 w-3 text-indigo-500 dark:text-indigo-400" />
-            argon 算出根拠プレビュー
+            算出根拠プレビュー
           </span>
           <span className="inline-flex items-center text-slate-500 group-hover:text-indigo-600 dark:text-slate-400 dark:group-hover:text-emerald-400">
             詳細・DCF再計算

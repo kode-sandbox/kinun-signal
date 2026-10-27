@@ -384,16 +384,12 @@ export default function StockDetailModal({
                 </div>
               </div>
 
-              {/* Section 2: LLM (argon) Reasoning Full Report */}
+              {/* Section 2: LLM Reasoning Full Report */}
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-5 dark:border-indigo-500/30 dark:bg-indigo-950/20">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
                     <Cpu className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                    LLM (argon) 算出根拠レポート全文
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded bg-indigo-500/15 px-2 py-0.5 font-mono text-[11px] text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200">
-                    <Sparkles className="h-3 w-3" />
-                    Model: argon
+                    LLM 算出根拠レポート全文
                   </span>
                 </div>
                 <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700 dark:text-slate-200">

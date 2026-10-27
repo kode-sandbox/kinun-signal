@@ -38,7 +38,7 @@ const FALLBACK_WATCHLIST: WatchlistItem[] = [
     free_cash_flow: 108_800_000_000,
     shares_outstanding: 15_200_000_000,
     reasoning_ja:
-      "【argon推論レポート】Appleは年間1,088億ドル規模の圧倒的なフリーキャッシュフロー（FCF）創出力を維持しています。Apple Intelligence搭載端末による買い替えサイクル加速と高粗利なServices部門（App Store・iCloud・決済）の2桁成長が事業価値を牽引。有利子負債を差し引いたネットキャッシュはマイナス414億ドルですが、強固な顧客ロックインと継続的な自社株買いによる希薄化後株式数の減少を考慮し、WACC 8.5%・基本FCF成長率11.0%・永久成長率2.5%と推論しました。欧州等の独占禁止法規制リスクを弱気シナリオ（6.0%成長）に織り込んでいます。",
+      "【推論レポート】Appleは年間1,088億ドル規模の圧倒的なフリーキャッシュフロー（FCF）創出力を維持しています。Apple Intelligence搭載端末による買い替えサイクル加速と高粗利なServices部門（App Store・iCloud・決済）の2桁成長が事業価値を牽引。有利子負債を差し引いたネットキャッシュはマイナス414億ドルですが、強固な顧客ロックインと継続的な自社株買いによる希薄化後株式数の減少を考慮し、WACC 8.5%・基本FCF成長率11.0%・永久成長率2.5%と推論しました。欧州等の独占禁止法規制リスクを弱気シナリオ（6.0%成長）に織り込んでいます。",
     last_earnings_date: "2026-07-30",
     calculated_at: "2026-10-17T08:00:00Z",
   },
@@ -61,7 +61,7 @@ const FALLBACK_WATCHLIST: WatchlistItem[] = [
     free_cash_flow: 74_200_000_000,
     shares_outstanding: 24_500_000_000,
     reasoning_ja:
-      "【argon推論レポート】NVIDIAは生成AIデータセンター向けBlackwell世代GPUおよびネットワーク機器の独占的需要により、直近FCFが742億ドルへ急拡大し、現金385億ドル・負債98億ドルと実質無借金（ネットキャッシュ+287億ドル）の極めて健全な財務体質を誇ります。CUDAエコシステムとNIMソフトウェアによる高い参入障壁を評価し、今後5年間の基本FCF成長率を28.0%（強気36.0%・弱気16.0%）、半導体サイクルのボラティリティを加味したWACCを9.0%、永久成長率を3.0%と算出しました。現在株価は目標割安率を超える買い圏内に位置しています。",
+      "【推論レポート】NVIDIAは生成AIデータセンター向けBlackwell世代GPUおよびネットワーク機器の独占的需要により、直近FCFが742億ドルへ急拡大し、現金385億ドル・負債98億ドルと実質無借金（ネットキャッシュ+287億ドル）の極めて健全な財務体質を誇ります。CUDAエコシステムとNIMソフトウェアによる高い参入障壁を評価し、今後5年間の基本FCF成長率を28.0%（強気36.0%・弱気16.0%）、半導体サイクルのボラティリティを加味したWACCを9.0%、永久成長率を3.0%と算出しました。現在株価は目標割安率を超える買い圏内に位置しています。",
     last_earnings_date: "2026-08-26",
     calculated_at: "2026-10-17T08:00:00Z",
   },
@@ -257,7 +257,7 @@ export default function DashboardPage() {
         id: Date.now() + idx,
         ticker: item.ticker,
         alert_type: "EARNINGS",
-        message: `📊【四半期決算速報＆理論株価アップデート】${item.company_name} (${item.ticker})\nEPS実績が市場予想を+6.8%ビート！\n🔄 理論株価再計算(argon): 新Base理論株価 $${item.base_price.toFixed(
+        message: `📊【四半期決算速報＆理論株価アップデート】${item.company_name} (${item.ticker})\nEPS実績が市場予想を+6.8%ビート！\n🔄 理論株価再計算: 新Base理論株価 $${item.base_price.toFixed(
           2
         )} (現在株価比: ${item.divergence_rate.toFixed(2)}%)`,
         sent_at: nowIso,
@@ -288,7 +288,7 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await fetchDashboardData();
       showToast(
-        `📊 ${ticker} を新規登録し、argon推論によるDCF理論株価算出とLINE通知を実行しました`
+        `📊 ${ticker} を新規登録し、DCF理論株価算出とLINE通知を実行しました`
       );
     } catch {
       // Offline fallback creation
@@ -311,7 +311,7 @@ export default function DashboardPage() {
         net_cash: 22_500_000_000,
         free_cash_flow: 48_000_000_000,
         shares_outstanding: 6_800_000_000,
-        reasoning_ja: `【argon推論レポート】${ticker}の過去3期FCF成長トレンドと高い営業利益率に基づき、今後5年間の基本FCF成長率を14.0%、割引率(WACC)を8.5%、永久成長率を2.5%と推論しました。潤沢なネットキャッシュと事業価値の合計から算出される理論株価は現在株価に対して割安水準にあります。`,
+        reasoning_ja: `【推論レポート】${ticker}の過去3期FCF成長トレンドと高い営業利益率に基づき、今後5年間の基本FCF成長率を14.0%、割引率(WACC)を8.5%、永久成長率を2.5%と推論しました。潤沢なネットキャッシュと事業価値の合計から算出される理論株価は現在株価に対して割安水準にあります。`,
         last_earnings_date: "2026-08-01",
         calculated_at: nowIso,
       };
@@ -460,7 +460,7 @@ export default function DashboardPage() {
                   ウォッチ銘柄 DCF バリュエーション一覧
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  カードをクリックすると財務基礎データ・argon算出根拠全文・WACCスライダー再計算モーダルが開きます
+                  カードをクリックすると財務基礎データ・算出根拠全文・WACCスライダー再計算モーダルが開きます
                 </p>
               </div>
               <button

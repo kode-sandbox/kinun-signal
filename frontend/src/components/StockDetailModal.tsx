@@ -268,29 +268,29 @@ export default function StockDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-      <div className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm dark:bg-black/75">
+      <div className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/80">
           <div className="flex items-center gap-3">
-            <span className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 font-mono text-xl font-extrabold text-emerald-400">
+            <span className="rounded-lg border border-slate-200 bg-slate-900 px-3 py-1 font-mono text-xl font-extrabold text-white dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-400">
               {ticker}
             </span>
             <div>
-              <h2 className="text-base font-bold text-white sm:text-lg">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white sm:text-lg">
                 {detail?.watchlist.company_name ?? fallbackItem?.company_name}
               </h2>
-              <div className="flex items-center gap-3 text-xs text-slate-400">
+              <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                 <span>
                   現在株価:{" "}
-                  <strong className="font-mono text-slate-200">
+                  <strong className="font-mono text-slate-800 dark:text-slate-200">
                     ${currentPrice.toFixed(2)}
                   </strong>
                 </span>
                 <span>•</span>
                 <span>
                   目標割安率:{" "}
-                  <strong className="font-mono text-emerald-400">
+                  <strong className="font-mono text-slate-800 dark:text-emerald-400">
                     -
                     {(
                       detail?.watchlist.target_discount_rate ??
@@ -304,7 +304,7 @@ export default function StockDetailModal({
                   <>
                     <span>•</span>
                     <span className="inline-flex items-center gap-1">
-                      <Calendar className="h-3 w-3 text-indigo-400" />
+                      <Calendar className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
                       直近決算日: {detail.watchlist.last_earnings_date}
                     </span>
                   </>
@@ -316,7 +316,7 @@ export default function StockDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-slate-400 transition hover:border-slate-700 hover:text-white"
+            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-white"
           >
             <X className="h-5 w-5" />
           </button>
@@ -325,26 +325,28 @@ export default function StockDetailModal({
         {/* Modal Body */}
         <div className="flex-1 space-y-6 overflow-y-auto p-6">
           {isLoading ? (
-            <div className="flex items-center justify-center py-16 text-slate-400">
-              <Loader2 className="mr-2 h-6 w-6 animate-spin text-emerald-400" />
+            <div className="flex items-center justify-center py-16 text-slate-500 dark:text-slate-400">
+              <Loader2 className="mr-2 h-6 w-6 animate-spin text-emerald-600 dark:text-emerald-400" />
               <span>財務・DCF履歴データを読み込み中...</span>
             </div>
           ) : (
             <>
               {/* Section 1: Financial Foundation KPIs ($XX.XB notation) */}
               <div>
-                <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  <DollarSign className="h-4 w-4 text-emerald-400" />
+                <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   財務基礎データ（資産価値 ＋ 事業価値ベース）
                 </h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-                    <span className="text-xs text-slate-400">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
                       ネットキャッシュ (現金 - 有利子負債)
                     </span>
                     <div
                       className={`mt-1 font-mono text-xl font-bold ${
-                        netCash >= 0 ? "text-emerald-400" : "text-amber-400"
+                        netCash >= 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-amber-600 dark:text-amber-400"
                       }`}
                     >
                       {formatBillionsDollars(netCash)}
@@ -355,11 +357,11 @@ export default function StockDetailModal({
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-                    <span className="text-xs text-slate-400">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
                       直近通期フリーキャッシュフロー (FCF)
                     </span>
-                    <div className="mt-1 font-mono text-xl font-bold text-indigo-300">
+                    <div className="mt-1 font-mono text-xl font-bold text-indigo-600 dark:text-indigo-300">
                       {formatBillionsDollars(fcf)}
                     </div>
                     <p className="mt-1 text-[11px] text-slate-500">
@@ -368,11 +370,11 @@ export default function StockDetailModal({
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-                    <span className="text-xs text-slate-400">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
                       希薄化後発行済株式数
                     </span>
-                    <div className="mt-1 font-mono text-xl font-bold text-slate-100">
+                    <div className="mt-1 font-mono text-xl font-bold text-slate-900 dark:text-slate-100">
                       {formatBillionsShares(shares)}
                     </div>
                     <p className="mt-1 text-[11px] text-slate-500">
@@ -383,32 +385,32 @@ export default function StockDetailModal({
               </div>
 
               {/* Section 2: LLM (argon) Reasoning Full Report */}
-              <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-5">
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-5 dark:border-indigo-500/30 dark:bg-indigo-950/20">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-300">
-                    <Cpu className="h-4 w-4 text-indigo-400" />
+                  <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                    <Cpu className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                     LLM (argon) 算出根拠レポート全文
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded bg-indigo-500/20 px-2 py-0.5 font-mono text-[11px] text-indigo-200">
+                  <span className="inline-flex items-center gap-1 rounded bg-indigo-500/15 px-2 py-0.5 font-mono text-[11px] text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200">
                     <Sparkles className="h-3 w-3" />
                     Model: argon
                   </span>
                 </div>
-                <p className="whitespace-pre-line text-sm leading-relaxed text-slate-200">
+                <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700 dark:text-slate-200">
                   {latest?.reasoning_ja ?? fallbackItem?.reasoning_ja}
                 </p>
               </div>
 
               {/* Section 3: Interactive DCF Simulator */}
-              <div className="rounded-xl border border-emerald-500/30 bg-slate-950/80 p-5">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-emerald-500/30 dark:bg-slate-950/80">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <Sliders className="h-4 w-4 text-emerald-400" />
-                    <h3 className="text-sm font-bold text-white">
+                    <Sliders className="h-4 w-4 text-slate-700 dark:text-emerald-400" />
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                       インタラクティブ DCF シミュレーター
                     </h3>
                   </div>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
                     スライダーで割引率(WACC)と成長率を調整して理論株価を再計算
                   </span>
                 </div>
@@ -420,11 +422,11 @@ export default function StockDetailModal({
                       <div className="mb-1.5 flex items-center justify-between text-xs">
                         <label
                           htmlFor="wacc-slider"
-                          className="font-medium text-slate-300"
+                          className="font-medium text-slate-700 dark:text-slate-300"
                         >
                           割引率 (WACC)
                         </label>
-                        <span className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5 font-mono text-sm font-bold text-emerald-400">
+                        <span className="rounded border border-slate-300 bg-white px-2 py-0.5 font-mono text-sm font-bold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-emerald-400">
                           {waccPct.toFixed(1)}%
                         </span>
                       </div>
@@ -436,7 +438,7 @@ export default function StockDetailModal({
                         step={0.1}
                         value={waccPct}
                         onChange={(e) => setWaccPct(parseFloat(e.target.value))}
-                        className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-800 accent-emerald-500"
+                        className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-200 accent-slate-900 dark:bg-slate-800 dark:accent-emerald-500"
                       />
                       <div className="mt-1 flex justify-between font-mono text-[10px] text-slate-500">
                         <span>4.0% (低金利)</span>
@@ -449,11 +451,11 @@ export default function StockDetailModal({
                       <div className="mb-1.5 flex items-center justify-between text-xs">
                         <label
                           htmlFor="growth-slider"
-                          className="font-medium text-slate-300"
+                          className="font-medium text-slate-700 dark:text-slate-300"
                         >
                           今後5年間の基本FCF成長率 (Base Growth)
                         </label>
-                        <span className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5 font-mono text-sm font-bold text-indigo-400">
+                        <span className="rounded border border-slate-300 bg-white px-2 py-0.5 font-mono text-sm font-bold text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-indigo-400">
                           {growthBasePct.toFixed(1)}%
                         </span>
                       </div>
@@ -467,7 +469,7 @@ export default function StockDetailModal({
                         onChange={(e) =>
                           setGrowthBasePct(parseFloat(e.target.value))
                         }
-                        className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-800 accent-indigo-500"
+                        className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-200 accent-indigo-600 dark:bg-slate-800 dark:accent-indigo-500"
                       />
                       <div className="mt-1 flex justify-between font-mono text-[10px] text-slate-500">
                         <span>0.0% (成熟)</span>
@@ -478,24 +480,24 @@ export default function StockDetailModal({
                   </div>
 
                   {/* Live Preview & Submit Button */}
-                  <div className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-900/90 p-4">
+                  <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-none">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
                           シミュレーション理論株価 (Base)
                         </span>
                         <div className="mt-1 flex items-baseline gap-2">
-                          <span className="font-mono text-2xl font-extrabold text-emerald-400">
+                          <span className="font-mono text-2xl font-extrabold text-slate-900 dark:text-emerald-400">
                             ${simulatedBasePrice.toFixed(2)}
                           </span>
-                          <span className="font-mono text-xs text-slate-400">
+                          <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
                             (現在値比:{" "}
                             {simulatedDivergence > 0 ? "+" : ""}
                             {simulatedDivergence.toFixed(2)}%)
                           </span>
                         </div>
                       </div>
-                      <TrendingUp className="h-8 w-8 text-emerald-500/40" />
+                      <TrendingUp className="h-8 w-8 text-slate-300 dark:text-emerald-500/40" />
                     </div>
 
                     <div className="mt-4">
@@ -503,7 +505,7 @@ export default function StockDetailModal({
                         type="button"
                         onClick={handleRecalculateWithCustom}
                         disabled={isRecalculating}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500 sm:text-sm"
                       >
                         {isRecalculating ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -517,7 +519,7 @@ export default function StockDetailModal({
                 </div>
 
                 {feedbackMessage && (
-                  <div className="mt-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-xs font-medium text-emerald-300">
+                  <div className="mt-3 rounded-lg border border-slate-200 border-l-4 border-l-emerald-600 bg-white px-3.5 py-2 text-xs font-medium text-slate-800 dark:border-l dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300">
                     {feedbackMessage}
                   </div>
                 )}
@@ -525,13 +527,13 @@ export default function StockDetailModal({
 
               {/* Section 4: Historical Theoretical Prices Table */}
               <div>
-                <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  <History className="h-4 w-4 text-indigo-400" />
+                <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <History className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                   過去の理論株価算出履歴（初回算出 vs 決算後更新 vs 手動調整）
                 </h3>
-                <div className="overflow-x-auto rounded-xl border border-slate-800">
+                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
                   <table className="w-full text-left text-xs">
-                    <thead className="border-b border-slate-800 bg-slate-950/90 text-slate-400">
+                    <thead className="border-b border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-400">
                       <tr>
                         <th className="px-4 py-2.5 font-medium">算出日時</th>
                         <th className="px-4 py-2.5 font-medium">トリガー種別</th>
@@ -542,39 +544,42 @@ export default function StockDetailModal({
                         <th className="px-4 py-2.5 font-medium">基準FCF</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/70 bg-slate-900/60 font-mono">
+                    <tbody className="divide-y divide-slate-200 bg-white font-mono dark:divide-slate-800/70 dark:bg-slate-900/60">
                       {(detail?.theoretical_history ?? []).map((row) => (
-                        <tr key={row.id} className="hover:bg-slate-800/40">
-                          <td className="px-4 py-2.5 text-slate-300">
+                        <tr
+                          key={row.id}
+                          className="hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                        >
+                          <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">
                             {new Date(row.calculated_at).toLocaleString("ja-JP")}
                           </td>
                           <td className="px-4 py-2.5">
                             <span
                               className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${
                                 row.trigger_type === "EARNINGS_UPDATE"
-                                  ? "border border-indigo-500/40 bg-indigo-500/15 text-indigo-300"
+                                  ? "border border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300"
                                   : row.trigger_type === "MANUAL"
-                                  ? "border border-amber-500/40 bg-amber-500/15 text-amber-300"
-                                  : "border border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                                  ? "border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                                  : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
                               }`}
                             >
                               {row.trigger_type}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5 font-bold text-emerald-400">
+                          <td className="px-4 py-2.5 font-bold text-emerald-600 dark:text-emerald-400">
                             ${row.base_price.toFixed(2)}
                           </td>
-                          <td className="px-4 py-2.5 text-slate-300">
+                          <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">
                             ${row.bull_price.toFixed(2)} / $
                             {row.bear_price.toFixed(2)}
                           </td>
-                          <td className="px-4 py-2.5 text-slate-300">
+                          <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">
                             {(row.wacc * 100).toFixed(1)}%
                           </td>
-                          <td className="px-4 py-2.5 text-slate-300">
+                          <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">
                             {(row.growth_rate_base * 100).toFixed(1)}%
                           </td>
-                          <td className="px-4 py-2.5 text-slate-300">
+                          <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">
                             {formatBillionsDollars(row.free_cash_flow)}
                           </td>
                         </tr>
@@ -588,12 +593,12 @@ export default function StockDetailModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between border-t border-slate-800 bg-slate-950/80 px-6 py-3.5">
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5 dark:border-slate-800 dark:bg-slate-950/80">
           <button
             type="button"
             onClick={handleDelete}
             disabled={isDeleting}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-950/30 px-3.5 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-900/50 hover:text-white disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/50 dark:hover:text-white"
           >
             {isDeleting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -606,7 +611,7 @@ export default function StockDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700"
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             閉じる
           </button>

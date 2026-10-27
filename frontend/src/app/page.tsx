@@ -103,6 +103,26 @@ export default function DashboardPage() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("psa-theme");
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setTheme(savedTheme);
+      document.documentElement.classList.toggle("dark", savedTheme === "dark");
+    } else {
+      document.documentElement.classList.add("dark");
+    }
+  }, []);
+
+  const handleToggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      localStorage.setItem("psa-theme", next);
+      document.documentElement.classList.toggle("dark", next === "dark");
+      return next;
+    });
+  }, []);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -327,7 +347,7 @@ export default function DashboardPage() {
     watchlist.find((w) => w.ticker === selectedTicker) ?? null;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
       {/* 1. Top Navigation Bar */}
       <Header
         onOpenAddModal={() => setIsAddModalOpen(true)}
@@ -335,20 +355,22 @@ export default function DashboardPage() {
         onRunEarningsCheck={handleRunEarningsCheck}
         isDailyLoading={isDailyLoading}
         isEarningsLoading={isEarningsLoading}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
       {/* Toast Banner */}
       {toastMessage && (
         <div className="mx-auto max-w-[1440px] px-4 pt-4 sm:px-6">
-          <div className="flex items-center justify-between rounded-xl border border-emerald-500/50 bg-emerald-950/60 px-4 py-3 text-xs font-medium text-emerald-200 shadow-lg sm:text-sm">
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 border-l-4 border-l-emerald-600 bg-white px-4 py-3 text-xs font-medium text-slate-800 shadow-md dark:border-emerald-500/50 dark:border-l dark:bg-emerald-950/60 dark:text-emerald-200 dark:shadow-lg sm:text-sm">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
               <span>{toastMessage}</span>
             </div>
             <button
               type="button"
               onClick={() => setToastMessage(null)}
-              className="ml-4 text-xs text-emerald-400 hover:underline"
+              className="ml-4 text-xs text-slate-500 hover:text-slate-900 hover:underline dark:text-emerald-400"
             >
               閉じる
             </button>
@@ -360,57 +382,59 @@ export default function DashboardPage() {
         {/* 2. Summary KPI Bar */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {/* KPI 1: Monitored Stocks Count */}
-          <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/90 px-5 py-4">
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-none">
             <div>
-              <span className="text-xs font-medium text-slate-400">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 監視中の米国株銘柄数
               </span>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="font-mono text-2xl font-extrabold text-white">
+                <span className="font-mono text-2xl font-extrabold text-slate-900 dark:text-white">
                   {watchlist.length}
                 </span>
-                <span className="text-xs text-slate-400">銘柄</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  銘柄
+                </span>
               </div>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/80 text-indigo-400">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-indigo-400">
               <Layers className="h-5 w-5" />
             </div>
           </div>
 
-          {/* KPI 2: Undervalued Alert Count (Highlighted in Emerald Green) */}
-          <div className="flex items-center justify-between rounded-xl border border-emerald-500/40 bg-emerald-950/20 px-5 py-4 shadow-[0_0_20px_-8px_rgba(16,185,129,0.3)]">
+          {/* KPI 2: Undervalued Alert Count */}
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 border-l-4 border-l-emerald-600 bg-white px-5 py-4 shadow-sm dark:border-l dark:border-emerald-500/40 dark:bg-emerald-950/20 dark:shadow-[0_0_20px_-8px_rgba(16,185,129,0.3)]">
             <div>
-              <span className="text-xs font-semibold text-emerald-300">
+              <span className="text-xs font-semibold text-slate-700 dark:text-emerald-300">
                 🎯 割安アラート点灯中の銘柄数
               </span>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="font-mono text-2xl font-extrabold text-emerald-400">
+                <span className="font-mono text-2xl font-extrabold text-slate-900 dark:text-emerald-400">
                   {undervaluedCount}
                 </span>
-                <span className="text-xs text-emerald-300/80">
+                <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300/80">
                   銘柄 (買い圏内到達)
                 </span>
               </div>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-500/40 bg-emerald-500/15 text-emerald-400">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-900 text-emerald-400 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-400">
               <Target className="h-5 w-5" />
             </div>
           </div>
 
           {/* KPI 3: Latest Batch / Notification Timestamp */}
-          <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/90 px-5 py-4">
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-none">
             <div>
-              <span className="text-xs font-medium text-slate-400">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 最新のバッチ・通知実行時刻
               </span>
-              <div className="mt-1 font-mono text-sm font-bold text-slate-200 sm:text-base">
+              <div className="mt-1 font-mono text-sm font-bold text-slate-800 dark:text-slate-200 sm:text-base">
                 {latestExecutionTime}
               </div>
               <span className="text-[11px] text-slate-500">
                 自動Cron: 米国市場引け後 翌朝06:30 (JST)
               </span>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/80 text-slate-300">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
               <Clock className="h-5 w-5" />
             </div>
           </div>
@@ -422,17 +446,17 @@ export default function DashboardPage() {
           <div className="space-y-4 lg:col-span-2">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-white sm:text-lg">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white sm:text-lg">
                   ウォッチ銘柄 DCF バリュエーション一覧
                 </h2>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   カードをクリックすると財務基礎データ・argon算出根拠全文・WACCスライダー再計算モーダルが開きます
                 </p>
               </div>
               <button
                 type="button"
                 onClick={fetchDashboardData}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-400 transition hover:border-slate-700 hover:text-white"
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:shadow-none dark:hover:border-slate-700 dark:hover:text-white"
               >
                 <RefreshCcw className="h-3.5 w-3.5" />
                 <span>更新</span>
@@ -444,13 +468,13 @@ export default function DashboardPage() {
                 {[1, 2].map((n) => (
                   <div
                     key={n}
-                    className="h-80 animate-pulse rounded-xl border border-slate-800 bg-slate-900/60 p-5"
+                    className="h-80 animate-pulse rounded-xl border border-slate-200 bg-slate-100 p-5 dark:border-slate-800 dark:bg-slate-900/60"
                   />
                 ))}
               </div>
             ) : watchlist.length === 0 ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-12 text-center">
-                <p className="text-sm text-slate-400">
+              <div className="rounded-xl border border-slate-200 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900/60 dark:shadow-none">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   現在ウォッチ中の銘柄はありません。右上の「＋
                   銘柄を追加」から米国株ティッカーを登録してください。
                 </p>
@@ -469,23 +493,23 @@ export default function DashboardPage() {
           </div>
 
           {/* Right Column (Width 1/3): LINE Notification & Alert History Timeline */}
-          <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/95 shadow-xl">
+          <div className="flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-xl">
             {/* LINE Chat Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 bg-[#06C755]/10 px-4 py-3.5">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3.5 dark:border-slate-800 dark:bg-[#06C755]/10">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#06C755] text-white shadow">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#06C755] text-white shadow-sm">
                   <MessageSquare className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-white">
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">
                     LINE 通知＆アラート履歴
                   </h2>
-                  <p className="text-[11px] text-emerald-300/80">
+                  <p className="text-[11px] text-slate-500 dark:text-emerald-300/80">
                     Personal Stock Analyst Bot (リアルタイムプレビュー)
                   </p>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] text-emerald-300">
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
                 <Bell className="h-3 w-3" />
                 {alerts.length}件
               </span>
@@ -507,7 +531,7 @@ export default function DashboardPage() {
 
                   return (
                     <div key={alert.id} className="flex items-start gap-2.5">
-                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-950 font-mono text-[10px] font-bold text-emerald-300">
+                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-900 font-mono text-[10px] font-bold text-white dark:border-emerald-500/40 dark:bg-emerald-950 dark:text-emerald-300">
                         {alert.ticker.slice(0, 4)}
                       </div>
                       <div className="flex-1">
@@ -515,12 +539,12 @@ export default function DashboardPage() {
                           <span
                             className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
                               isUndervalued
-                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                ? "border border-slate-200 bg-slate-900 text-emerald-400 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300"
                                 : isEarnings
-                                ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
+                                ? "border border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-500/20 dark:text-indigo-300"
                                 : isNews
-                                ? "bg-sky-500/20 text-sky-300 border border-sky-500/40"
-                                : "bg-slate-800 text-slate-300 border border-slate-700"
+                                ? "border border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/20 dark:text-sky-300"
+                                : "border border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                             }`}
                           >
                             {alert.alert_type} • {alert.ticker}
@@ -539,8 +563,8 @@ export default function DashboardPage() {
                         <div
                           className={`rounded-2xl rounded-tl-none border p-3 text-xs leading-relaxed whitespace-pre-line ${
                             isUndervalued
-                              ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-100"
-                              : "border-slate-800 bg-slate-950/90 text-slate-200"
+                              ? "border-slate-200 border-l-4 border-l-emerald-600 bg-slate-50 text-slate-900 dark:border-l dark:border-emerald-500/40 dark:bg-emerald-950/30 dark:text-emerald-100"
+                              : "border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-200"
                           }`}
                         >
                           {alert.message}

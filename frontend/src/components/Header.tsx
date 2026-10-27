@@ -51,10 +51,7 @@ export default function Header({
               </h1>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300">
                 <Cpu className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                Powered by argon LLM
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-300">
-                <Cpu className="h-3.5 w-3.5 text-indigo-400" />
-                Powered by {llmModel || "LLM"}
+                Powered by {llmModel || "argon LLM"}
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">

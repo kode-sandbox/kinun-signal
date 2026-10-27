@@ -1,7 +1,7 @@
-FROM rust:1.78 AS builder
+FROM rust:bookworm AS builder
 WORKDIR /app
 COPY . .
-RUN apt-get update && apt-get install -y libpq-dev && \
+RUN apt-get update && apt-get install -y libpq-dev pkg-config libssl-dev && \
     cargo build --release
 
 FROM debian:bookworm-slim

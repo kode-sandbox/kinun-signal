@@ -542,9 +542,7 @@ export default function DashboardPage() {
             <div className="flex-1 space-y-3.5 overflow-y-auto p-4">
               {alerts.length === 0 ? (
                 <div className="py-12 text-center text-xs text-slate-500">
-                  まだLINE通知履歴はありません。上の「🔄
-                  日次監視＆ニュース要約を実行」または「📊
-                  決算チェック＆再計算を実行」を押すと通知が生成されます。
+                  まだLINE通知履歴はありません。上の「日次監視＆ニュース要約を実行」または「決算チェック＆再計算を実行」を押すと通知が生成されます。
                 </div>
               ) : (
                 alerts.map((alert) => {

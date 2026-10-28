@@ -338,10 +338,7 @@ pub async fn recalculate_stock(
         .await
         .map_err(internal_err)?;
 
-    let (fin, news) = tokio::join!(
-        state.fmp.fetch_financials(&symbol),
-        state.fmp.fetch_news(&symbol)
-    );
+    let fin = state.fmp.fetch_financials(&symbol).await;
 
     let has_custom_override = req.custom_wacc.is_some()
         || req.custom_growth_rate_base.is_some()
@@ -359,7 +356,7 @@ pub async fn recalculate_stock(
                 terminal_growth_rate: tp.terminal_growth_rate,
                 reasoning_ja: tp.reasoning_ja.clone(),
             },
-            None => state.llm.infer_dcf_parameters(&fin, &news).await,
+            None => LlmClient::fallback_dcf_params(&fin),
         };
 
         let wacc = req.custom_wacc.unwrap_or(base_ref.wacc);
@@ -406,7 +403,8 @@ pub async fn recalculate_stock(
             ),
         }
     } else {
-        state.llm.infer_dcf_parameters(&fin, &news).await
+        // 画面からの「自走算出値にリセット」操作ではLLMトークンを消費せず、プログラム側のCAPM＆財務推論を使用
+        LlmClient::fallback_dcf_params(&fin)
     };
 
     let dcf_input = DcfInput {
@@ -469,6 +467,7 @@ pub async fn run_earnings_check_handler(
 #[derive(serde::Serialize)]
 pub struct SystemInfoResponse {
     pub llm_model: String,
+    pub llm_news_model: String,
 }
 
 pub async fn get_system_info(
@@ -476,6 +475,7 @@ pub async fn get_system_info(
 ) -> ApiResult<Json<SystemInfoResponse>> {
     Ok(Json(SystemInfoResponse {
         llm_model: state.config.llm_model.clone(),
+        llm_news_model: state.config.llm_news_model.clone(),
     }))
 }
 
@@ -555,108 +555,124 @@ pub async fn execute_earnings_check(
     let watchlists = db::get_all_watchlists(&state.pool).await?;
     let today = Utc::now().date_naive();
 
-    let mut alerts_triggered = 0usize;
-    let mut messages = Vec::new();
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(6));
+    let mut join_set = tokio::task::JoinSet::new();
 
-    for w in &watchlists {
-        let fin = state.fmp.fetch_financials(&w.ticker).await;
-        let is_new_earnings = match (fin.latest_earnings_date, w.last_earnings_date) {
-            (Some(latest), Some(prev)) => latest > prev,
-            (Some(_), None) => true,
-            _ => false,
-        };
+    for (idx, w) in watchlists.iter().cloned().enumerate() {
+        let sem = semaphore.clone();
+        let pool = state.pool.clone();
+        let fmp = state.fmp.clone();
+        let llm = state.llm.clone();
+        let line = state.line.clone();
 
-        if !is_new_earnings && !force {
-            continue;
-        }
+        join_set.spawn(async move {
+            let _permit = sem.acquire().await.ok();
+            let fin = fmp.fetch_financials(&w.ticker).await;
+            let is_new_earnings = match (fin.latest_earnings_date, w.last_earnings_date) {
+                (Some(latest), Some(prev)) => latest > prev,
+                (Some(_), None) => true,
+                _ => false,
+            };
 
-        let prev_tp = db::get_latest_theoretical_price(&state.pool, &w.ticker).await?;
-        let old_base = prev_tp.as_ref().map(|t| t.base_price).unwrap_or(0.0);
-
-        let news = state.fmp.fetch_news(&w.ticker).await;
-        let params = state.llm.infer_dcf_parameters(&fin, &news).await;
-
-        let dcf_input = DcfInput {
-            cash_and_equivalents: fin.cash_and_short_term_investments,
-            total_debt: fin.total_debt,
-            free_cash_flow: fin.free_cash_flow,
-            shares_outstanding: fin.shares_outstanding,
-            wacc: params.wacc,
-            growth_rate_base: params.growth_rate_base,
-            growth_rate_bull: params.growth_rate_bull,
-            growth_rate_bear: params.growth_rate_bear,
-            terminal_growth_rate: params.terminal_growth_rate,
-        };
-        let dcf_out = dcf::calculate(&dcf_input);
-
-        db::insert_theoretical_price(
-            &state.pool,
-            &w.ticker,
-            "EARNINGS_UPDATE",
-            &dcf_out,
-            fin.free_cash_flow,
-            fin.shares_outstanding,
-            &params,
-        )
-        .await?;
-
-        if let Some(earnings_date) = fin.latest_earnings_date {
-            db::update_watchlist_earnings_date(&state.pool, &w.ticker, earnings_date).await?;
-        }
-
-        let div_rate = dcf::calculate_divergence_rate(fin.current_price, dcf_out.base_price);
-        db::upsert_daily_price(&state.pool, &w.ticker, today, fin.current_price, div_rate).await?;
-
-        // Build earnings metadata lines ONLY from fields actually obtained from Yahoo Finance / FMP
-        let mut meta_lines = Vec::new();
-        if let Some(ed) = fin.latest_earnings_date {
-            meta_lines.push(format!("直近決算期末日: {}", ed));
-        }
-        match (fin.eps_actual, fin.eps_estimated) {
-            (Some(actual), Some(est)) if est > 0.0 => {
-                let beat_pct = ((actual - est) / est) * 100.0;
-                meta_lines.push(format!(
-                    "EPS実績: ${:.2} vs 予想: ${:.2} (サプライズ: {:+.1}%)",
-                    actual, est, beat_pct
-                ));
+            if !is_new_earnings && !force {
+                return Ok::<Option<(usize, String)>, anyhow::Error>(None);
             }
-            (Some(actual), _) => {
-                meta_lines.push(format!("直近四半期希薄化後EPS実績: ${:.2}", actual));
-            }
-            _ => {}
-        }
 
-        let meta_section = if meta_lines.is_empty() {
-            String::new()
-        } else {
-            format!("{}\n", meta_lines.join("\n"))
-        };
+            let prev_tp = db::get_latest_theoretical_price(&pool, &w.ticker).await?;
+            let old_base = prev_tp.as_ref().map(|t| t.base_price).unwrap_or(0.0);
 
-        let price_diff = dcf_out.base_price - old_base;
-        let earnings_msg = format!(
-            "📊【四半期決算＆理論株価アップデート】{} ({})\n{}\n🔄 理論株価の再計算結果 (WACC {:.1}% / 永久成長率 {:.1}%):\n旧Base理論株価: ${:.2} ➔ 新Base理論株価: ${:.2} ({:+.2}$)\n新Bull: ${:.2} / 新Bear: ${:.2}\n現在株価: ${:.2} (新乖離率: {:+.2}%)",
-            w.company_name,
-            w.ticker,
-            meta_section,
-            params.wacc * 100.0,
-            params.terminal_growth_rate * 100.0,
-            old_base,
-            dcf_out.base_price,
-            price_diff,
-            dcf_out.bull_price,
-            dcf_out.bear_price,
-            fin.current_price,
-            div_rate
-        );
+            let news = fmp.fetch_news(&w.ticker).await;
+            let params = llm.infer_dcf_parameters(&fin, &news).await;
 
-        state
-            .line
-            .send_and_log(&state.pool, &w.ticker, "EARNINGS", &earnings_msg)
+            let dcf_input = DcfInput {
+                cash_and_equivalents: fin.cash_and_short_term_investments,
+                total_debt: fin.total_debt,
+                free_cash_flow: fin.free_cash_flow,
+                shares_outstanding: fin.shares_outstanding,
+                wacc: params.wacc,
+                growth_rate_base: params.growth_rate_base,
+                growth_rate_bull: params.growth_rate_bull,
+                growth_rate_bear: params.growth_rate_bear,
+                terminal_growth_rate: params.terminal_growth_rate,
+            };
+            let dcf_out = dcf::calculate(&dcf_input);
+
+            db::insert_theoretical_price(
+                &pool,
+                &w.ticker,
+                "EARNINGS_UPDATE",
+                &dcf_out,
+                fin.free_cash_flow,
+                fin.shares_outstanding,
+                &params,
+            )
             .await?;
 
-        alerts_triggered += 1;
-        messages.push(earnings_msg);
+            if let Some(earnings_date) = fin.latest_earnings_date {
+                db::update_watchlist_earnings_date(&pool, &w.ticker, earnings_date).await?;
+            }
+
+            let div_rate = dcf::calculate_divergence_rate(fin.current_price, dcf_out.base_price);
+            db::upsert_daily_price(&pool, &w.ticker, today, fin.current_price, div_rate).await?;
+
+            // Build earnings metadata lines ONLY from fields actually obtained from Yahoo Finance / FMP
+            let mut meta_lines = Vec::new();
+            if let Some(ed) = fin.latest_earnings_date {
+                meta_lines.push(format!("直近決算期末日: {}", ed));
+            }
+            match (fin.eps_actual, fin.eps_estimated) {
+                (Some(actual), Some(est)) if est > 0.0 => {
+                    let beat_pct = ((actual - est) / est) * 100.0;
+                    meta_lines.push(format!(
+                        "EPS実績: ${:.2} vs 予想: ${:.2} (サプライズ: {:+.1}%)",
+                        actual, est, beat_pct
+                    ));
+                }
+                (Some(actual), _) => {
+                    meta_lines.push(format!("直近四半期希薄化後EPS実績: ${:.2}", actual));
+                }
+                _ => {}
+            }
+
+            let meta_section = if meta_lines.is_empty() {
+                String::new()
+            } else {
+                format!("{}\n", meta_lines.join("\n"))
+            };
+
+            let price_diff = dcf_out.base_price - old_base;
+            let earnings_msg = format!(
+                "📊【四半期決算＆理論株価アップデート】{} ({})\n{}\n🔄 理論株価の再計算結果 (WACC {:.1}% / 永久成長率 {:.1}%):\n旧Base理論株価: ${:.2} ➔ 新Base理論株価: ${:.2} ({:+.2}$)\n新Bull: ${:.2} / 新Bear: ${:.2}\n現在株価: ${:.2} (新乖離率: {:+.2}%)",
+                w.company_name,
+                w.ticker,
+                meta_section,
+                params.wacc * 100.0,
+                params.terminal_growth_rate * 100.0,
+                old_base,
+                dcf_out.base_price,
+                price_diff,
+                dcf_out.bull_price,
+                dcf_out.bear_price,
+                fin.current_price,
+                div_rate
+            );
+
+            line.send_and_log(&pool, &w.ticker, "EARNINGS", &earnings_msg)
+                .await?;
+
+            Ok(Some((idx, earnings_msg)))
+        });
     }
+
+    let mut ordered_results = Vec::new();
+    while let Some(res) = join_set.join_next().await {
+        if let Some(pair) = res?? {
+            ordered_results.push(pair);
+        }
+    }
+    ordered_results.sort_by_key(|(idx, _)| *idx);
+    let alerts_triggered = ordered_results.len();
+    let messages = ordered_results.into_iter().map(|(_, m)| m).collect();
 
     Ok(JobSummaryResponse {
         job_name: "earnings-check".to_string(),

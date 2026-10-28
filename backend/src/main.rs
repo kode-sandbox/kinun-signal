@@ -34,9 +34,10 @@ async fn main() -> anyhow::Result<()> {
 
     let cfg = AppConfig::from_env();
     info!(
-        "Starting Personal Stock Analyst Backend (port={}, llm_model={}, fmp_mock={}, llm_mock={}, line_mock={})",
+        "Starting Personal Stock Analyst Backend (port={}, dcf_llm_model={}, news_llm_model={}, fmp_mock={}, llm_mock={}, line_mock={})",
         cfg.backend_port,
         cfg.llm_model,
+        cfg.llm_news_model,
         cfg.is_fmp_mock(),
         cfg.is_llm_mock(),
         cfg.is_line_mock()

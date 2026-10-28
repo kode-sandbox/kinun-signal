@@ -9,6 +9,7 @@ pub struct AppConfig {
     pub llm_api_base_url: String,
     pub llm_api_key: String,
     pub llm_model: String,
+    pub llm_news_model: String,
     pub line_channel_access_token: String,
     pub line_user_id: String,
 }
@@ -44,6 +45,11 @@ impl AppConfig {
             .ok()
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| "argon".to_string());
+        let llm_news_model = env::var("LLM_NEWS_MODEL")
+            .or_else(|_| env::var("LLM_LIGHT_MODEL"))
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "gemini-3.5-flash-lite".to_string());
 
         let line_channel_access_token = env::var("LINE_CHANNEL_ACCESS_TOKEN")
             .unwrap_or_else(|_| "mock_line_token".to_string());
@@ -58,6 +64,7 @@ impl AppConfig {
             llm_api_base_url,
             llm_api_key,
             llm_model,
+            llm_news_model,
             line_channel_access_token,
             line_user_id,
         }

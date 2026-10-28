@@ -49,7 +49,7 @@ impl LlmClient {
     pub fn new(config: AppConfig) -> Self {
         Self {
             http: Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(60))
                 .build()
                 .unwrap_or_default(),
             config,
@@ -137,7 +137,9 @@ WACCと永久成長率は、提供されたCAPM自走算出値（auto_wacc, auto
             news_text
         );
 
-        let raw_content = self.send_chat_completion(system_prompt, &user_prompt).await?;
+        let raw_content = self
+            .send_chat_completion_with_model(&self.config.llm_model, system_prompt, &user_prompt)
+            .await?;
         let cleaned = sanitize_json_response(&raw_content);
         let mut parsed: LlmDcfParams = serde_json::from_str(&cleaned)?;
         // Anchor WACC and Terminal Growth Rate to the self-calculated values if LLM deviates wildly
@@ -154,8 +156,8 @@ WACCと永久成長率は、提供されたCAPM自走算出値（auto_wacc, auto
     ) -> String {
         if self.config.is_llm_mock() {
             info!(
-                "LLM_API_KEY is mock/unset (model={}). Generating structured Japanese 3-line summary for {}",
-                self.config.llm_model, ticker
+                "LLM_API_KEY is mock/unset (news_model={}). Generating structured Japanese 3-line summary for {}",
+                self.config.llm_news_model, ticker
             );
             return Self::fallback_news_summary(ticker, company_name, news);
         }
@@ -164,11 +166,12 @@ WACCと永久成長率は、提供されたCAPM自走算出値（auto_wacc, auto
 
         let news_list = news
             .iter()
-            .take(5)
+            .take(3)
             .map(|n| {
+                let compact_text: String = n.text.chars().take(180).collect();
                 format!(
                     "Title: {}\nDate: {}\nSummary: {}",
-                    n.title, n.published_date, n.text
+                    n.title, n.published_date, compact_text
                 )
             })
             .collect::<Vec<_>>()
@@ -179,12 +182,19 @@ WACCと永久成長率は、提供されたCAPM自走算出値（auto_wacc, auto
             ticker, company_name, news_list
         );
 
-        match self.send_chat_completion(system_prompt, &user_prompt).await {
+        match self
+            .send_chat_completion_with_model(
+                &self.config.llm_news_model,
+                system_prompt,
+                &user_prompt,
+            )
+            .await
+        {
             Ok(summary) if !summary.trim().is_empty() => summary.trim().to_string(),
             Err(err) => {
                 warn!(
-                    "LLM news summary failed for {} ({}). Using fallback summary.",
-                    ticker, err
+                    "LLM news summary (model={}) failed for {} ({}). Using fallback summary.",
+                    self.config.llm_news_model, ticker, err
                 );
                 Self::fallback_news_summary(ticker, company_name, news)
             }
@@ -192,14 +202,26 @@ WACCと永久成長率は、提供されたCAPM自走算出値（auto_wacc, auto
         }
     }
 
-    async fn send_chat_completion(
+    async fn send_chat_completion_with_model(
         &self,
+        model_name: &str,
         system_prompt: &str,
         user_prompt: &str,
     ) -> anyhow::Result<String> {
         let url = format!("{}/chat/completions", self.config.llm_api_base_url);
+        let resolved_model = if self
+            .config
+            .llm_api_base_url
+            .contains("generativelanguage.googleapis.com")
+            && (model_name.eq_ignore_ascii_case("argon")
+                || model_name.eq_ignore_ascii_case("algon"))
+        {
+            "gemini-4-argon".to_string()
+        } else {
+            model_name.to_string()
+        };
         let req_body = ChatCompletionRequest {
-            model: self.config.llm_model.clone(),
+            model: resolved_model,
             messages: vec![
                 ChatMessage {
                     role: "system".to_string(),

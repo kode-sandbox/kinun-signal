@@ -57,6 +57,8 @@ struct FmpProfileItem {
 
 #[derive(Debug, Deserialize)]
 struct FmpBalanceSheetItem {
+    #[serde(rename = "reportedCurrency", default)]
+    reported_currency: String,
     #[serde(rename = "cashAndShortTermInvestments", default)]
     cash_and_short_term_investments: f64,
     #[serde(rename = "totalDebt", default)]
@@ -65,12 +67,18 @@ struct FmpBalanceSheetItem {
 
 #[derive(Debug, Deserialize)]
 struct FmpCashFlowItem {
+    #[serde(rename = "reportedCurrency", default)]
+    reported_currency: String,
     #[serde(rename = "freeCashFlow", default)]
     free_cash_flow: f64,
+    #[serde(rename = "operatingCashFlow", default)]
+    operating_cash_flow: f64,
 }
 
 #[derive(Debug, Deserialize)]
 struct FmpIncomeItem {
+    #[serde(rename = "reportedCurrency", default)]
+    reported_currency: String,
     #[serde(default)]
     revenue: f64,
     #[serde(rename = "weightedAverageShsOutDil", default)]
@@ -162,6 +170,7 @@ struct YahooSearchNewsItem {
 struct TimeseriesPoint {
     as_of_date: String,
     raw_value: f64,
+    currency_code: Option<String>,
 }
 
 const YAHOO_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)";
@@ -233,7 +242,21 @@ impl FmpClient {
         );
 
         let (current_price, real_name, stock_closes) = stock_chart_res?;
-        let ts_map = ts_res?;
+        let mut ts_map = ts_res?;
+
+        // ① 外国通貨建て財務データの米ドル（USD）自動換算（TSMのTWD、ASMLのEUR、SONYのJPY等）
+        if let Some(fin_currency) = detect_reporting_currency(&ts_map) {
+            if !fin_currency.eq_ignore_ascii_case("USD") {
+                let fx_rate = self.fetch_fx_rate_to_usd(&fin_currency).await;
+                if fx_rate > 0.0 && (fx_rate - 1.0).abs() > 1e-6 {
+                    convert_timeseries_to_usd(&mut ts_map, fx_rate);
+                    info!(
+                        "Converted {} financial statement figures from {} to USD (rate: {:.4} {}/USD)",
+                        symbol, fin_currency, fx_rate, fin_currency
+                    );
+                }
+            }
+        }
 
         let beta = if let Ok((_, _, sp500_closes)) = sp500_chart_res {
             calculate_blume_adjusted_beta(&stock_closes, &sp500_closes)
@@ -253,42 +276,22 @@ impl FmpClient {
             .or_else(|| latest_ts_val(&ts_map, "annualTotalDebt"))
             .unwrap_or(0.0);
 
-        // Prefer the higher of TTM Free Cash Flow and latest Annual FCF when TTM is temporarily depressed by a single-quarter CapEx spike
+        // ② 基準FCFの算出と、一時的CapEx急増によるFCFマイナス／急減時の正規化補正（AMZN等のAIデータセンター投資期対応）
         let ttm_fcf_pt = latest_ts_point(&ts_map, "trailingFreeCashFlow");
         let annual_fcf_pts = ts_map.get("annualFreeCashFlow").cloned().unwrap_or_default();
+        let ttm_ocf_pt = latest_ts_point(&ts_map, "trailingOperatingCashFlow");
+        let annual_ocf_pts = ts_map
+            .get("annualOperatingCashFlow")
+            .cloned()
+            .unwrap_or_default();
 
-        let free_cash_flow = match (&ttm_fcf_pt, annual_fcf_pts.last()) {
-            (Some(ttm), Some(ann)) => {
-                if ttm.as_of_date >= ann.as_of_date {
-                    if ttm.raw_value > 0.0 && ann.raw_value > ttm.raw_value {
-                        // Smooth temporary CapEx spike by blending 50% TTM and 50% latest full-year FCF
-                        0.5 * (ttm.raw_value + ann.raw_value)
-                    } else {
-                        ttm.raw_value
-                    }
-                } else {
-                    ann.raw_value
-                }
-            }
-            (Some(ttm), None) => ttm.raw_value,
-            (None, Some(ann)) => ann.raw_value,
-            (None, None) => 0.0,
-        };
-
-        // Build FCF history (latest first: [TTM (if newer), FY_latest, FY_prev1, FY_prev2, ...])
-        let mut fcf_history: Vec<f64> = Vec::new();
-        if let Some(ttm) = &ttm_fcf_pt {
-            if annual_fcf_pts
-                .last()
-                .map(|a| ttm.as_of_date > a.as_of_date)
-                .unwrap_or(true)
-            {
-                fcf_history.push(ttm.raw_value);
-            }
-        }
-        for pt in annual_fcf_pts.iter().rev() {
-            fcf_history.push(pt.raw_value);
-        }
+        let (free_cash_flow, fcf_history) = normalize_fcf_and_history(
+            symbol,
+            ttm_fcf_pt.as_ref(),
+            &annual_fcf_pts,
+            ttm_ocf_pt.as_ref(),
+            &annual_ocf_pts,
+        );
 
         // Build Revenue history (latest first)
         let ttm_rev_pt = latest_ts_point(&ts_map, "trailingTotalRevenue");
@@ -309,8 +312,8 @@ impl FmpClient {
 
         let shares_outstanding = latest_ts_val(&ts_map, "quarterlyDilutedAverageShares")
             .or_else(|| latest_ts_val(&ts_map, "trailingDilutedAverageShares"))
-            .or_else(|| latest_ts_val(&ts_map, "quarterlyOrdinarySharesNumber"))
             .or_else(|| latest_ts_val(&ts_map, "annualDilutedAverageShares"))
+            .or_else(|| latest_ts_val(&ts_map, "quarterlyOrdinarySharesNumber"))
             .unwrap_or(0.0);
 
         if shares_outstanding <= 0.0 && free_cash_flow == 0.0 && cash == 0.0 {
@@ -418,6 +421,37 @@ impl FmpClient {
         Ok(rate.clamp(0.020, 0.070))
     }
 
+    /// 指定された外国通貨（TWD, EUR, JPY, CNY, DKK 等）の対米ドル為替レート（1 USD あたりの現地通貨単位）を取得する
+    pub async fn fetch_fx_rate_to_usd(&self, currency: &str) -> f64 {
+        let raw_curr = currency.trim();
+        if raw_curr.is_empty() || raw_curr.eq_ignore_ascii_case("USD") {
+            return 1.0;
+        }
+
+        // GBp / GBX (British Pence: 100 pence = 1 GBP), ILA (Israeli Agorot: 100 agorot = 1 ILS)
+        let (lookup_curr, subunit_multiplier) = if raw_curr == "GBp" || raw_curr.eq_ignore_ascii_case("GBX") {
+            ("GBP".to_string(), 100.0)
+        } else if raw_curr.eq_ignore_ascii_case("ILA") {
+            ("ILS".to_string(), 100.0)
+        } else {
+            (raw_curr.to_uppercase(), 1.0)
+        };
+
+        let fx_symbol = format!("{}=X", lookup_curr);
+        if let Ok((rate, _, _)) = self.fetch_chart_with_closes(&fx_symbol, "5d", "1d").await {
+            if rate.is_finite() && rate > 0.0 {
+                return rate * subunit_multiplier;
+            }
+        }
+
+        let fallback = fallback_fx_rate_per_usd(&lookup_curr) * subunit_multiplier;
+        warn!(
+            "Yahoo FX quote failed for {}, using fallback rate {:.4} {}/USD",
+            fx_symbol, fallback, raw_curr
+        );
+        fallback
+    }
+
     async fn fetch_yahoo_fundamentals_timeseries(
         &self,
         symbol: &str,
@@ -435,6 +469,8 @@ impl FmpClient {
             "quarterlyOrdinarySharesNumber",
             "trailingFreeCashFlow",
             "annualFreeCashFlow",
+            "trailingOperatingCashFlow",
+            "annualOperatingCashFlow",
             "trailingTotalRevenue",
             "annualTotalRevenue",
             "annualTaxRateForCalcs",
@@ -499,6 +535,11 @@ impl FmpClient {
                     .and_then(|d| d.as_str())
                     .unwrap_or_default()
                     .to_string();
+                let currency_code = item
+                    .get("currencyCode")
+                    .and_then(|c| c.as_str())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
                 let raw_val = item
                     .get("reportedValue")
                     .and_then(|rv| rv.get("raw"))
@@ -509,6 +550,7 @@ impl FmpClient {
                         points.push(TimeseriesPoint {
                             as_of_date,
                             raw_value,
+                            currency_code,
                         });
                     }
                 }
@@ -573,8 +615,8 @@ impl FmpClient {
 
         let profile_url = format!("{}/profile/{}?apikey={}", base, symbol, key);
         let bs_url = format!("{}/balance-sheet-statement/{}?limit=1&apikey={}", base, symbol, key);
-        let cf_url = format!("{}/cash-flow-statement/{}?limit=3&apikey={}", base, symbol, key);
-        let pl_url = format!("{}/income-statement/{}?limit=3&apikey={}", base, symbol, key);
+        let cf_url = format!("{}/cash-flow-statement/{}?limit=4&apikey={}", base, symbol, key);
+        let pl_url = format!("{}/income-statement/{}?limit=4&apikey={}", base, symbol, key);
         let earnings_url = format!("{}/earnings-surprises/{}?apikey={}", base, symbol, key);
 
         let profiles: Vec<FmpProfileItem> = self.http.get(&profile_url).send().await?.json().await?;
@@ -609,11 +651,23 @@ impl FmpClient {
             Err(_) => None,
         };
 
-        let free_cash_flow = cf_list[0].free_cash_flow;
-        let fcf_history = cf_list.iter().map(|c| c.free_cash_flow).collect();
-        let revenue_history = pl_list.iter().map(|p| p.revenue).collect();
+        // ① 外国通貨建て財務諸表の米ドル換算
+        let reported_curr = [&cf_list[0].reported_currency, &bs.reported_currency, &pl_list[0].reported_currency]
+            .into_iter()
+            .find(|c| !c.trim().is_empty())
+            .cloned()
+            .unwrap_or_else(|| "USD".to_string());
+        let fx_rate = if !reported_curr.eq_ignore_ascii_case("USD") {
+            self.fetch_fx_rate_to_usd(&reported_curr).await.max(1e-6)
+        } else {
+            1.0
+        };
+
+        // ② 一時的CapEx赤字時の基準FCF補正（営業CF・過去黒字FCF平均へのフォールバック）
+        let (free_cash_flow, fcf_history) = normalize_fmp_api_fcf(symbol, &cf_list, fx_rate);
+        let revenue_history = pl_list.iter().map(|p| p.revenue / fx_rate).collect();
         let shares_outstanding = pl_list[0].weighted_average_shs_out_dil;
-        let interest_expense = pl_list[0].interest_expense;
+        let interest_expense = pl_list[0].interest_expense.map(|ie| ie / fx_rate);
         let effective_tax_rate = match (pl_list[0].income_tax_expense, pl_list[0].income_before_tax)
         {
             (Some(tax), Some(pretax)) if pretax > 0.0 && tax >= 0.0 => {
@@ -640,8 +694,8 @@ impl FmpClient {
                 profile.company_name
             },
             current_price: profile.price,
-            cash_and_short_term_investments: bs.cash_and_short_term_investments,
-            total_debt: bs.total_debt,
+            cash_and_short_term_investments: bs.cash_and_short_term_investments / fx_rate,
+            total_debt: bs.total_debt / fx_rate,
             free_cash_flow,
             fcf_history,
             revenue_history,
@@ -845,6 +899,290 @@ fn latest_ts_val(map: &HashMap<String, Vec<TimeseriesPoint>>, key: &str) -> Opti
     latest_ts_point(map, key).map(|p| p.raw_value)
 }
 
+/// 財務諸表の金額項目（FCF・売上高・現金・負債等）から報告通貨コードを検出する
+fn detect_reporting_currency(map: &HashMap<String, Vec<TimeseriesPoint>>) -> Option<String> {
+    let monetary_keys = [
+        "trailingFreeCashFlow",
+        "annualFreeCashFlow",
+        "trailingOperatingCashFlow",
+        "annualOperatingCashFlow",
+        "trailingTotalRevenue",
+        "annualTotalRevenue",
+        "quarterlyCashCashEquivalentsAndShortTermInvestments",
+        "annualCashCashEquivalentsAndShortTermInvestments",
+        "quarterlyTotalDebt",
+        "annualTotalDebt",
+    ];
+    for key in monetary_keys {
+        if let Some(pts) = map.get(key) {
+            for pt in pts.iter().rev() {
+                if let Some(curr) = &pt.currency_code {
+                    if !curr.is_empty() {
+                        return Some(curr.clone());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// 株式数・税率以外のすべての金額ベース時系列データを指定レート（現地通貨 / 1 USD）で米ドル換算する
+fn convert_timeseries_to_usd(map: &mut HashMap<String, Vec<TimeseriesPoint>>, fx_rate_per_usd: f64) {
+    if fx_rate_per_usd <= 0.0 || (fx_rate_per_usd - 1.0).abs() <= 1e-6 {
+        return;
+    }
+    let non_monetary_keys = [
+        "quarterlyDilutedAverageShares",
+        "trailingDilutedAverageShares",
+        "annualDilutedAverageShares",
+        "quarterlyOrdinarySharesNumber",
+        "annualTaxRateForCalcs",
+    ];
+
+    for (key, points) in map.iter_mut() {
+        if non_monetary_keys.contains(&key.as_str()) {
+            continue;
+        }
+        for pt in points.iter_mut() {
+            pt.raw_value /= fx_rate_per_usd;
+            pt.currency_code = Some("USD".to_string());
+        }
+    }
+}
+
+/// Yahoo Finance FX API が一時的に到達不能な場合のフォールバック為替レート（1 USD あたりの現地通貨単位）
+fn fallback_fx_rate_per_usd(currency: &str) -> f64 {
+    match currency.trim().to_uppercase().as_str() {
+        "USD" => 1.0,
+        "TWD" => 32.2,
+        "JPY" => 155.0,
+        "EUR" => 0.90,
+        "GBP" => 0.76,
+        "CNY" | "CNH" => 6.80,
+        "HKD" => 7.82,
+        "KRW" => 1350.0,
+        "DKK" => 6.72,
+        "CAD" => 1.39,
+        "CHF" => 0.84,
+        "INR" => 90.0,
+        "BRL" => 5.30,
+        "AUD" => 1.44,
+        "SEK" => 10.0,
+        "NOK" => 10.6,
+        "SGD" => 1.30,
+        "ILS" => 3.65,
+        "MXN" => 19.0,
+        "ZAR" => 18.0,
+        "NZD" => 1.62,
+        "THB" => 34.0,
+        "IDR" => 15800.0,
+        "MYR" => 4.35,
+        "PHP" => 56.5,
+        "PLN" => 3.95,
+        "TRY" => 34.5,
+        _ => 1.0,
+    }
+}
+
+/// 基準FCFと過去FCF推移を構築し、AI設備投資（CapEx）急増等で直近FCFが一時的にマイナスまたは営業CF比で極端に圧縮されている場合は
+/// 営業キャッシュフロー（OCF）および過去の黒字FCF実績に基づいて定常ベースラインFCFへ正規化する
+fn normalize_fcf_and_history(
+    symbol: &str,
+    ttm_fcf_pt: Option<&TimeseriesPoint>,
+    annual_fcf_pts: &[TimeseriesPoint],
+    ttm_ocf_pt: Option<&TimeseriesPoint>,
+    annual_ocf_pts: &[TimeseriesPoint],
+) -> (f64, Vec<f64>) {
+    // 1. 通常の基準FCF算出（TTMが通期より減少しているが正の場合は50/50ブレンド）
+    let raw_fcf = match (ttm_fcf_pt, annual_fcf_pts.last()) {
+        (Some(ttm), Some(ann)) => {
+            if ttm.as_of_date >= ann.as_of_date {
+                if ttm.raw_value > 0.0 && ann.raw_value > ttm.raw_value {
+                    0.5 * (ttm.raw_value + ann.raw_value)
+                } else {
+                    ttm.raw_value
+                }
+            } else {
+                ann.raw_value
+            }
+        }
+        (Some(ttm), None) => ttm.raw_value,
+        (None, Some(ann)) => ann.raw_value,
+        (None, None) => 0.0,
+    };
+
+    let mut fcf_history: Vec<f64> = Vec::new();
+    if let Some(ttm) = ttm_fcf_pt {
+        if annual_fcf_pts
+            .last()
+            .map(|a| ttm.as_of_date > a.as_of_date)
+            .unwrap_or(true)
+        {
+            fcf_history.push(ttm.raw_value);
+        }
+    }
+    for pt in annual_fcf_pts.iter().rev() {
+        fcf_history.push(pt.raw_value);
+    }
+
+    // 2. 営業キャッシュフロー（OCF）の取得
+    let latest_ocf = match (ttm_ocf_pt, annual_ocf_pts.last()) {
+        (Some(ttm), Some(ann)) => {
+            if ttm.as_of_date >= ann.as_of_date {
+                ttm.raw_value.max(ann.raw_value)
+            } else {
+                ann.raw_value
+            }
+        }
+        (Some(ttm), None) => ttm.raw_value,
+        (None, Some(ann)) => ann.raw_value,
+        (None, None) => 0.0,
+    };
+
+    // 3. 一時的CapEx急増によるFCFマイナス／急減の判定
+    // - raw_fcf <= 0.0 (AMZN等、直近TTMのAI設備投資でFCFが一時的にマイナス転落したケース)
+    // - または 営業CFが黒字かつ raw_fcf が営業CFの15%未満に急減しているケース
+    let is_capex_depressed =
+        raw_fcf <= 0.0 || (latest_ocf > 0.0 && raw_fcf < latest_ocf * 0.15);
+
+    if !is_capex_depressed {
+        return (raw_fcf, fcf_history);
+    }
+
+    // 4. 過去の正常な黒字FCF実績と、正常期の (FCF / 営業CF) 転換率を集計
+    let mut ocf_by_date: HashMap<&str, f64> = HashMap::new();
+    for pt in annual_ocf_pts {
+        ocf_by_date.insert(pt.as_of_date.as_str(), pt.raw_value);
+    }
+
+    let mut healthy_pos_fcfs = Vec::new();
+    let mut all_pos_fcfs = Vec::new();
+    let mut healthy_conversion_ratios = Vec::new();
+
+    for pt in annual_fcf_pts {
+        if pt.raw_value > 0.0 {
+            all_pos_fcfs.push(pt.raw_value);
+            if let Some(&yr_ocf) = ocf_by_date.get(pt.as_of_date.as_str()) {
+                if yr_ocf > 0.0 {
+                    let ratio = pt.raw_value / yr_ocf;
+                    if ratio >= 0.15 {
+                        healthy_pos_fcfs.push(pt.raw_value);
+                        healthy_conversion_ratios.push(ratio.clamp(0.20, 0.75));
+                    }
+                } else {
+                    healthy_pos_fcfs.push(pt.raw_value);
+                }
+            } else {
+                healthy_pos_fcfs.push(pt.raw_value);
+            }
+        }
+    }
+
+    let hist_pos_fcf_avg = if !healthy_pos_fcfs.is_empty() {
+        healthy_pos_fcfs.iter().sum::<f64>() / (healthy_pos_fcfs.len() as f64)
+    } else if !all_pos_fcfs.is_empty() {
+        all_pos_fcfs.iter().sum::<f64>() / (all_pos_fcfs.len() as f64)
+    } else {
+        0.0
+    };
+
+    let hist_conversion_ratio = if !healthy_conversion_ratios.is_empty() {
+        let avg_r = healthy_conversion_ratios.iter().sum::<f64>()
+            / (healthy_conversion_ratios.len() as f64);
+        // 過去の正常期転換率と定常メンテナンスCapEx控除後転換率(40%)をブレンド
+        (0.50 * avg_r + 0.50 * 0.40).clamp(0.32, 0.50)
+    } else {
+        0.38
+    };
+
+    let ocf_based_fcf = if latest_ocf > 0.0 {
+        latest_ocf * hist_conversion_ratio
+    } else {
+        0.0
+    };
+
+    let normalized_fcf = match (ocf_based_fcf > 0.0, hist_pos_fcf_avg > 0.0) {
+        (true, true) => {
+            // 直近の営業CF規模を反映した正規化FCF(80%)と過去の黒字FCF平均(20%)をブレンド
+            if ocf_based_fcf >= hist_pos_fcf_avg {
+                0.80 * ocf_based_fcf + 0.20 * hist_pos_fcf_avg
+            } else {
+                0.50 * ocf_based_fcf + 0.50 * hist_pos_fcf_avg
+            }
+        }
+        (true, false) => ocf_based_fcf,
+        (false, true) => hist_pos_fcf_avg,
+        (false, false) => raw_fcf,
+    };
+
+    if normalized_fcf <= 0.0 {
+        return (raw_fcf, fcf_history);
+    }
+
+    info!(
+        "Normalized temporary CapEx-depressed FCF for {}: raw_fcf=${:.2}B -> normalized_fcf=${:.2}B (latest_ocf=${:.2}B, hist_pos_fcf_avg=${:.2}B)",
+        symbol,
+        raw_fcf / 1e9,
+        normalized_fcf / 1e9,
+        latest_ocf / 1e9,
+        hist_pos_fcf_avg / 1e9
+    );
+
+    // 5. fcf_history も正規化（CAGR算出やLLMプロンプトでマイナスFCFによる破綻を防ぐ）
+    let eff_ratio = if latest_ocf > 0.0 {
+        (normalized_fcf / latest_ocf).clamp(0.25, 0.55)
+    } else {
+        hist_conversion_ratio
+    };
+
+    let mut normalized_history = Vec::new();
+    normalized_history.push(normalized_fcf);
+    for pt in annual_fcf_pts.iter().rev() {
+        let yr_ocf = ocf_by_date.get(pt.as_of_date.as_str()).copied().unwrap_or(0.0);
+        if pt.raw_value > 0.0 && (yr_ocf <= 0.0 || pt.raw_value >= yr_ocf * 0.15) {
+            normalized_history.push(pt.raw_value);
+        } else if yr_ocf > 0.0 {
+            normalized_history.push(yr_ocf * eff_ratio);
+        } else if hist_pos_fcf_avg > 0.0 {
+            normalized_history.push(hist_pos_fcf_avg);
+        }
+    }
+
+    (normalized_fcf, normalized_history)
+}
+
+/// FMP API 経由のキャッシュフロー計算書に対しても同様の通貨換算および一時的CapEx赤字時のFCF正規化を適用する
+fn normalize_fmp_api_fcf(
+    symbol: &str,
+    cf_list: &[FmpCashFlowItem],
+    fx_rate: f64,
+) -> (f64, Vec<f64>) {
+    let annual_fcf_pts: Vec<TimeseriesPoint> = cf_list
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(idx, c)| TimeseriesPoint {
+            as_of_date: format!("FY{}", idx),
+            raw_value: c.free_cash_flow / fx_rate,
+            currency_code: Some("USD".to_string()),
+        })
+        .collect();
+    let annual_ocf_pts: Vec<TimeseriesPoint> = cf_list
+        .iter()
+        .rev()
+        .enumerate()
+        .filter(|(_, c)| c.operating_cash_flow != 0.0)
+        .map(|(idx, c)| TimeseriesPoint {
+            as_of_date: format!("FY{}", idx),
+            raw_value: c.operating_cash_flow / fx_rate,
+            currency_code: Some("USD".to_string()),
+        })
+        .collect();
+
+    normalize_fcf_and_history(symbol, None, &annual_fcf_pts, None, &annual_ocf_pts)
+}
+
 /// 銘柄とS&P 500 (^GSPC) の月次終値系列から経験的ベータ値を算出し、Blume調整 (2/3 * raw_beta + 1/3 * 1.0) を適用する
 fn calculate_blume_adjusted_beta(stock_closes: &[f64], market_closes: &[f64]) -> Option<f64> {
     let n = stock_closes.len().min(market_closes.len());
@@ -934,5 +1272,115 @@ mod tests {
         let news = client.fetch_news("AAPL").await;
         println!("Fetched {} AAPL news items", news.len());
         assert!(!news.is_empty());
+
+        // ① TSM: TWD建て財務諸表が米ドル(USD)に正しく換算されていることを検証
+        let tsm_fin = client.fetch_financials("TSM").await;
+        println!(
+            "Fetched TSM Price: ${:.2}, FCF(USD): ${:.2}B, Cash(USD): ${:.2}B, Debt(USD): ${:.2}B, Shares: {:.2}B",
+            tsm_fin.current_price,
+            tsm_fin.free_cash_flow / 1e9,
+            tsm_fin.cash_and_short_term_investments / 1e9,
+            tsm_fin.total_debt / 1e9,
+            tsm_fin.shares_outstanding / 1e9
+        );
+        // 台湾ドル未換算ならFCFは約1.12兆(1124B)になるが、米ドル換算後は約$20B〜$60Bの範囲に収まる
+        assert!(tsm_fin.free_cash_flow > 10_000_000_000.0);
+        assert!(tsm_fin.free_cash_flow < 150_000_000_000.0);
+
+        // ② AMZN: AI設備投資による一時的TTM FCFマイナスが営業CF・過去黒字FCFベースで正の基準FCFへ補正されることを検証
+        let amzn_fin = client.fetch_financials("AMZN").await;
+        println!(
+            "Fetched AMZN Price: ${:.2}, Normalized FCF(USD): ${:.2}B, FCF History: {:?}",
+            amzn_fin.current_price,
+            amzn_fin.free_cash_flow / 1e9,
+            amzn_fin.fcf_history.iter().map(|v| format!("${:.1}B", v / 1e9)).collect::<Vec<_>>()
+        );
+        assert!(amzn_fin.free_cash_flow > 20_000_000_000.0);
+    }
+
+    #[test]
+    fn test_foreign_currency_conversion_and_capex_fcf_normalization() {
+        // 1. TWD -> USD 換算の単体テスト
+        let mut ts_map: HashMap<String, Vec<TimeseriesPoint>> = HashMap::new();
+        ts_map.insert(
+            "trailingFreeCashFlow".to_string(),
+            vec![TimeseriesPoint {
+                as_of_date: "2026-06-30".to_string(),
+                raw_value: 1_124_666_937_000.0,
+                currency_code: Some("TWD".to_string()),
+            }],
+        );
+        ts_map.insert(
+            "quarterlyDilutedAverageShares".to_string(),
+            vec![TimeseriesPoint {
+                as_of_date: "2026-06-30".to_string(),
+                raw_value: 5_186_400_000.0,
+                currency_code: Some("TWD".to_string()),
+            }],
+        );
+
+        assert_eq!(detect_reporting_currency(&ts_map).as_deref(), Some("TWD"));
+        convert_timeseries_to_usd(&mut ts_map, 32.0);
+        let usd_fcf = latest_ts_val(&ts_map, "trailingFreeCashFlow").unwrap();
+        let shares = latest_ts_val(&ts_map, "quarterlyDilutedAverageShares").unwrap();
+        assert!((usd_fcf - 35_145_841_781.25).abs() < 1.0);
+        // 株式数は通貨換算で割られないことを確認
+        assert_eq!(shares, 5_186_400_000.0);
+
+        // 2. AMZN型の一時的CapEx赤字時のFCF正規化テスト
+        let ttm_fcf = TimeseriesPoint {
+            as_of_date: "2026-06-30".to_string(),
+            raw_value: -11_625_000_000.0,
+            currency_code: Some("USD".to_string()),
+        };
+        let annual_fcfs = vec![
+            TimeseriesPoint {
+                as_of_date: "2023-12-31".to_string(),
+                raw_value: 32_217_000_000.0,
+                currency_code: Some("USD".to_string()),
+            },
+            TimeseriesPoint {
+                as_of_date: "2024-12-31".to_string(),
+                raw_value: 32_878_000_000.0,
+                currency_code: Some("USD".to_string()),
+            },
+            TimeseriesPoint {
+                as_of_date: "2025-12-31".to_string(),
+                raw_value: 7_695_000_000.0,
+                currency_code: Some("USD".to_string()),
+            },
+        ];
+        let ttm_ocf = TimeseriesPoint {
+            as_of_date: "2026-06-30".to_string(),
+            raw_value: 161_403_000_000.0,
+            currency_code: Some("USD".to_string()),
+        };
+        let annual_ocfs = vec![
+            TimeseriesPoint {
+                as_of_date: "2023-12-31".to_string(),
+                raw_value: 84_946_000_000.0,
+                currency_code: Some("USD".to_string()),
+            },
+            TimeseriesPoint {
+                as_of_date: "2024-12-31".to_string(),
+                raw_value: 115_877_000_000.0,
+                currency_code: Some("USD".to_string()),
+            },
+            TimeseriesPoint {
+                as_of_date: "2025-12-31".to_string(),
+                raw_value: 139_514_000_000.0,
+                currency_code: Some("USD".to_string()),
+            },
+        ];
+
+        let (norm_fcf, norm_hist) = normalize_fcf_and_history(
+            "AMZN",
+            Some(&ttm_fcf),
+            &annual_fcfs,
+            Some(&ttm_ocf),
+            &annual_ocfs,
+        );
+        assert!(norm_fcf > 45_000_000_000.0 && norm_fcf < 75_000_000_000.0);
+        assert!(norm_hist.iter().all(|&v| v > 0.0));
     }
 }

@@ -118,7 +118,7 @@ WACCと永久成長率は、提供されたCAPM自走算出値（auto_wacc, auto
         );
 
         let user_prompt = format!(
-            "銘柄: {} ({})\n現在株価: ${:.2}\n現金及び短期投資: ${:.0}\n有利子負債合計: ${:.0}\n直近FCF(TTM/通期): ${:.0}\n過去FCF推移(新しい順): {:?}\n過去売上推移(新しい順): {:?}\n希薄化後発行済株式数: {:.0}\nBeta(Blume調整後): {:?}\n米10年国債利回り(Rf): {:?}\n実効税率: {:?}\nCAPM自走算出WACC (auto_wacc): {:.4}\n自走算出永久成長率 (auto_terminal_growth): {:.4}\n現在株価が織り込む逆算FCF成長率 (implied_growth_rate): {:?}\n\n直近ニュース:\n{}",
+            "銘柄: {} ({})\n※以下の財務数値はすべて米ドル(USD)に換算済であり、一時的CapEx急増でTTM FCFがマイナス/急減している銘柄は営業CFおよび過去黒字FCFから定常基準FCFへ正規化済です。推論レポートでも必ず米ドル($)建てで記述してください。\n現在株価: ${:.2}\n現金及び短期投資(USD): ${:.0}\n有利子負債合計(USD): ${:.0}\n直近基準FCF(USD): ${:.0}\n過去FCF推移(USD・新しい順): {:?}\n過去売上推移(USD・新しい順): {:?}\n希薄化後発行済株式数: {:.0}\nBeta(Blume調整後): {:?}\n米10年国債利回り(Rf): {:?}\n実効税率: {:?}\nCAPM自走算出WACC (auto_wacc): {:.4}\n自走算出永久成長率 (auto_terminal_growth): {:.4}\n現在株価が織り込む逆算FCF成長率 (implied_growth_rate): {:?}\n\n直近ニュース:\n{}",
             financials.ticker,
             financials.company_name,
             financials.current_price,
@@ -541,7 +541,7 @@ mod tests {
     async fn test_live_yahoo_end_to_end_dcf_valuation() {
         let config = AppConfig::from_env();
         let fmp = crate::services::fmp::FmpClient::new(config);
-        for ticker in ["AAPL", "NVDA", "MSFT", "GOOGL"] {
+        for ticker in ["AAPL", "NVDA", "MSFT", "GOOGL", "TSM", "AMZN"] {
             let fin = fmp.fetch_financials(ticker).await;
             let params = LlmClient::fallback_dcf_params(&fin);
             let dcf_out = dcf::calculate(&dcf::DcfInput {
@@ -578,7 +578,8 @@ mod tests {
                 params.terminal_growth_rate * 100.0,
                 implied.map(|g| format!("{:.1}%", g * 100.0))
             );
-            assert!(dcf_out.base_price > 0.0);
+            assert!(dcf_out.base_price > 50.0);
+            assert!(dcf_out.base_price < 2000.0);
         }
     }
 }

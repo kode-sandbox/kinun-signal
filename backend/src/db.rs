@@ -407,7 +407,12 @@ pub async fn seed_initial_data_if_empty(
         let today = Utc::now().date_naive();
         for w in &existing {
             let needs_upgrade = match get_latest_theoretical_price(pool, &w.ticker).await? {
-                Some(tp) => !tp.reasoning_ja.contains("CAPM"),
+                Some(tp) => {
+                    !tp.reasoning_ja.contains("CAPM")
+                        || tp.base_price <= 0.0
+                        || tp.free_cash_flow <= 0.0
+                        || tp.free_cash_flow > 400_000_000_000.0
+                }
                 None => true,
             };
             if needs_upgrade {

@@ -67,6 +67,8 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let app = Router::new()
+        .route("/healthz", get(handlers::healthz))
+        .route("/api/healthz", get(handlers::healthz))
         .route(
             "/api/watchlist",
             get(handlers::get_watchlist).post(handlers::add_watchlist),

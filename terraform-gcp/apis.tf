@@ -5,6 +5,8 @@ locals {
     "secretmanager.googleapis.com",
     "run.googleapis.com",
     "cloudscheduler.googleapis.com",
+    "monitoring.googleapis.com",
+    "logging.googleapis.com",
   ]
 }
 

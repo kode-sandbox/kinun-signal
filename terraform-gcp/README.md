@@ -53,6 +53,10 @@ graph LR
    - Supabase の `DATABASE_URL` や各種 API キーは Cloud Run の平文環境変数ではなく、**Google Cloud Secret Manager** に格納し、最小権限の専用サービスアカウント経由で注入します。
 4. **Frontend → Backend の動的ルーティング対応**
    - Next.js 側にサーバーサイド Route Handler (`/api/[...path]`) を備えているため、Docker イメージのビルド時に Cloud Run Backend の URL が未確定でも、Terraform が起動時に注入する `BACKEND_INTERNAL_URL` を使って自動的に Backend へ通信します。
+5. **Cloud Monitoring による無料死活監視（Uptime Check）＆ Slack通知・ログ除外フィルタ (`monitoring.tf`)**
+   - **Uptime Check**: 5分間隔（`300s`）・世界3リージョン（Asia Pacific / USA / Europe）から Basic 認証付きで `/api/system/info`（または `/healthz`）へ HTTPS 死活監視を行います（DBクエリを伴わない軽量チェック）。
+   - **Slack アラート通知 (`google_monitoring_notification_channel.slack`)**: 2つ以上のリージョンから5分間連続してチェックが失敗した場合に Slack チャンネルへ即時通知します（Bot トークン `xoxb-...` による完全 IaC 自動構築、または GCP コンソールのワンクリック Slack OAuth 連携のどちらにも対応）。
+   - **Cloud Logging 除外フィルタ**: Uptime Check および `/healthz` の正常応答（`HTTP 200`）のアクセスログを Cloud Logging の `_Default` シンクから自動除外し、ログ容量の消費（課金リスク）をゼロに抑えます（異常時の `4xx`/`5xx` ログは通常通り記録されます）。
 
 ---
 

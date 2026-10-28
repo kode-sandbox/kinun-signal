@@ -40,3 +40,13 @@ output "earnings_check_scheduler_job" {
   description = "Cloud Scheduler job name for Quarterly Earnings Check"
   value       = google_cloud_scheduler_job.earnings_check.name
 }
+
+output "uptime_check_id" {
+  description = "Cloud Monitoring Uptime Check ID"
+  value       = google_monitoring_uptime_check_config.frontend.uptime_check_id
+}
+
+output "uptime_alert_policy_name" {
+  description = "Cloud Monitoring Alert Policy resource name for Uptime Check"
+  value       = google_monitoring_alert_policy.frontend_uptime.name
+}

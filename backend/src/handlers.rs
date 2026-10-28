@@ -467,6 +467,19 @@ pub async fn run_earnings_check_handler(
 }
 
 #[derive(serde::Serialize)]
+pub struct HealthzResponse {
+    pub status: &'static str,
+    pub service: &'static str,
+}
+
+pub async fn healthz() -> Json<HealthzResponse> {
+    Json(HealthzResponse {
+        status: "ok",
+        service: "kinun-signal-backend",
+    })
+}
+
+#[derive(serde::Serialize)]
 pub struct SystemInfoResponse {
     pub llm_model: String,
 }

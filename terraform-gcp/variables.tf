@@ -114,3 +114,40 @@ variable "scheduler_timezone" {
   default     = "Asia/Tokyo"
   description = "Time zone for Cloud Scheduler cron jobs"
 }
+
+variable "uptime_check_path" {
+  type        = string
+  default     = "/api/system/info"
+  description = "HTTP path for Cloud Monitoring Uptime Check ('/api/system/info' checks Frontend -> Backend end-to-end without DB load; '/healthz' checks Frontend only)"
+}
+
+variable "uptime_check_period" {
+  type        = string
+  default     = "300s"
+  description = "Frequency of Uptime Check executions ('60s', '300s', '600s', or '900s'). Default '300s' (5 min) keeps request & log volume minimal."
+}
+
+variable "alert_notification_email" {
+  type        = string
+  default     = ""
+  description = "Optional email address to receive Cloud Monitoring Uptime Check alert notifications (leave empty to skip email channel creation)"
+}
+
+variable "alert_slack_channel_name" {
+  type        = string
+  default     = ""
+  description = "Slack channel name (starting with '#', e.g. '#alerts') for Cloud Monitoring Uptime Check notifications"
+}
+
+variable "alert_slack_bot_token" {
+  type        = string
+  sensitive   = true
+  default     = ""
+  description = "Slack Bot User OAuth Token ('xoxb-...') with chat:write scope for Cloud Monitoring Slack notifications"
+}
+
+variable "alert_notification_channel_ids" {
+  type        = list(string)
+  default     = []
+  description = "Optional list of existing Cloud Monitoring Notification Channel resource names (e.g. ['projects/PROJECT_ID/notificationChannels/12345'] created via GCP Console Slack OAuth)"
+}

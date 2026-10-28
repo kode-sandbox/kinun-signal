@@ -102,7 +102,7 @@ export default function Header({
             ) : (
               <RefreshCw className="h-4 w-4 text-slate-600 dark:text-emerald-400" />
             )}
-            <span>🔄 日次監視＆ニュース要約を実行</span>
+            <span>日次監視＆ニュース要約を実行</span>
           </button>
 
           <button
@@ -116,7 +116,7 @@ export default function Header({
             ) : (
               <BarChart3 className="h-4 w-4 text-white dark:text-indigo-400" />
             )}
-            <span>📊 決算チェック＆再計算を実行</span>
+            <span>決算チェック＆再計算を実行</span>
           </button>
         </div>
       </div>

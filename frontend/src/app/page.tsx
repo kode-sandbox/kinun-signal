@@ -516,7 +516,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Right Column (Width 1/3): LINE Notification & Alert History Timeline */}
-          <div className="flex flex-col h-fit rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-xl">
+          <div className="flex flex-col max-h-[640px] lg:h-[1020px] lg:max-h-[1020px] rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-xl">
             {/* LINE Chat Header */}
             <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3.5 dark:border-slate-800 dark:bg-[#06C755]/10">
               <div className="flex items-center gap-2.5">

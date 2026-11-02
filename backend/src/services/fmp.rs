@@ -619,37 +619,77 @@ impl FmpClient {
         let pl_url = format!("{}/income-statement/{}?limit=4&apikey={}", base, symbol, key);
         let earnings_url = format!("{}/earnings-surprises/{}?apikey={}", base, symbol, key);
 
-        let profiles: Vec<FmpProfileItem> = self.http.get(&profile_url).send().await?.json().await?;
+        // All six requests are independent: fire them concurrently and apply
+        // the same per-response validation afterwards, in the original order.
+        let (profiles_res, bs_res, cf_res, pl_res, latest_earning, risk_free_rate_res) =
+            tokio::join!(
+                async {
+                    self.http
+                        .get(&profile_url)
+                        .send()
+                        .await?
+                        .json::<Vec<FmpProfileItem>>()
+                        .await
+                },
+                async {
+                    self.http
+                        .get(&bs_url)
+                        .send()
+                        .await?
+                        .json::<Vec<FmpBalanceSheetItem>>()
+                        .await
+                },
+                async {
+                    self.http
+                        .get(&cf_url)
+                        .send()
+                        .await?
+                        .json::<Vec<FmpCashFlowItem>>()
+                        .await
+                },
+                async {
+                    self.http
+                        .get(&pl_url)
+                        .send()
+                        .await?
+                        .json::<Vec<FmpIncomeItem>>()
+                        .await
+                },
+                async {
+                    match self.http.get(&earnings_url).send().await {
+                        Ok(resp) => resp
+                            .json::<Vec<FmpEarningsSurpriseItem>>()
+                            .await
+                            .unwrap_or_default()
+                            .into_iter()
+                            .next(),
+                        Err(_) => None,
+                    }
+                },
+                self.fetch_ten_year_treasury_yield(),
+            );
+
+        let profiles: Vec<FmpProfileItem> = profiles_res?;
         let profile = profiles
             .into_iter()
             .next()
             .ok_or_else(|| anyhow::anyhow!("Empty profile response for {}", symbol))?;
 
-        let bs_list: Vec<FmpBalanceSheetItem> = self.http.get(&bs_url).send().await?.json().await?;
+        let bs_list: Vec<FmpBalanceSheetItem> = bs_res?;
         let bs = bs_list
             .into_iter()
             .next()
             .ok_or_else(|| anyhow::anyhow!("Empty balance sheet response for {}", symbol))?;
 
-        let cf_list: Vec<FmpCashFlowItem> = self.http.get(&cf_url).send().await?.json().await?;
+        let cf_list: Vec<FmpCashFlowItem> = cf_res?;
         if cf_list.is_empty() {
             anyhow::bail!("Empty cash flow response for {}", symbol);
         }
 
-        let pl_list: Vec<FmpIncomeItem> = self.http.get(&pl_url).send().await?.json().await?;
+        let pl_list: Vec<FmpIncomeItem> = pl_res?;
         if pl_list.is_empty() {
             anyhow::bail!("Empty income statement response for {}", symbol);
         }
-
-        let latest_earning = match self.http.get(&earnings_url).send().await {
-            Ok(resp) => resp
-                .json::<Vec<FmpEarningsSurpriseItem>>()
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .next(),
-            Err(_) => None,
-        };
 
         // ① 外国通貨建て財務諸表の米ドル換算
         let reported_curr = [&cf_list[0].reported_currency, &bs.reported_currency, &pl_list[0].reported_currency]
@@ -684,7 +724,7 @@ impl FmpClient {
             None => (None, None, None),
         };
 
-        let risk_free_rate = self.fetch_ten_year_treasury_yield().await.ok();
+        let risk_free_rate = risk_free_rate_res.ok();
 
         Ok(StockFinancials {
             ticker: symbol.to_string(),

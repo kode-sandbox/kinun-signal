@@ -63,13 +63,24 @@ pub async fn get_watchlist(
         .await
         .map_err(internal_err)?;
 
+    // Batch-fetch the latest theoretical/daily prices for all tickers in two
+    // queries instead of two queries per ticker (N+1).
+    let tickers: Vec<String> = watchlists.iter().map(|w| w.ticker.clone()).collect();
+    let tp_map = db::get_latest_theoretical_prices(&state.pool, &tickers)
+        .await
+        .map_err(internal_err)?;
+    let dp_map = db::get_latest_daily_prices(&state.pool, &tickers)
+        .await
+        .map_err(internal_err)?;
+
     let mut items = Vec::with_capacity(watchlists.len());
     for w in &watchlists {
-        if let Some(item) = db::build_watchlist_item_response(&state.pool, w)
-            .await
-            .map_err(internal_err)?
-        {
-            items.push(item);
+        if let Some(tp) = tp_map.get(&w.ticker) {
+            items.push(db::build_watchlist_item_from_parts(
+                w,
+                tp,
+                dp_map.get(&w.ticker),
+            ));
         }
     }
 
@@ -492,51 +503,80 @@ pub async fn execute_daily_check(state: &AppState) -> anyhow::Result<JobSummaryR
     let watchlists = db::get_all_watchlists(&state.pool).await?;
     let today = Utc::now().date_naive();
 
-    let mut alerts_triggered = 0usize;
-    let mut messages = Vec::new();
+    // Process tickers concurrently (bounded), mirroring execute_earnings_check.
+    // Each task keeps the original per-ticker step order; results are re-sorted
+    // by watchlist index afterwards so the summary message order is unchanged.
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(6));
+    let mut join_set = tokio::task::JoinSet::new();
 
-    for w in &watchlists {
-        let fin = state.fmp.fetch_financials(&w.ticker).await;
-        let Some(tp) = db::get_latest_theoretical_price(&state.pool, &w.ticker).await? else {
-            continue;
-        };
+    for (idx, w) in watchlists.iter().cloned().enumerate() {
+        let sem = semaphore.clone();
+        let pool = state.pool.clone();
+        let fmp = state.fmp.clone();
+        let llm = state.llm.clone();
+        let line = state.line.clone();
 
-        let div_rate = dcf::calculate_divergence_rate(fin.current_price, tp.base_price);
-        db::upsert_daily_price(&state.pool, &w.ticker, today, fin.current_price, div_rate).await?;
+        join_set.spawn(async move {
+            let _permit = sem.acquire().await.ok();
+            let mut alerts_triggered = 0usize;
+            let mut messages = Vec::new();
 
-        if dcf::is_undervalued(fin.current_price, tp.base_price, w.target_discount_rate) {
-            let alert_msg = format!(
-                "🚨【割安アラート】{} が理論株価({:.2}$)から{:.2}%割安の {:.2}$ に到達しました！（目標割安率: {:.0}%）",
-                w.ticker,
-                tp.base_price,
-                div_rate.abs(),
-                fin.current_price,
-                w.target_discount_rate
+            let fin = fmp.fetch_financials(&w.ticker).await;
+            let Some(tp) = db::get_latest_theoretical_price(&pool, &w.ticker).await? else {
+                return Ok::<(usize, usize, Vec<String>), anyhow::Error>((
+                    idx,
+                    alerts_triggered,
+                    messages,
+                ));
+            };
+
+            let div_rate = dcf::calculate_divergence_rate(fin.current_price, tp.base_price);
+            db::upsert_daily_price(&pool, &w.ticker, today, fin.current_price, div_rate).await?;
+
+            if dcf::is_undervalued(fin.current_price, tp.base_price, w.target_discount_rate) {
+                let alert_msg = format!(
+                    "🚨【割安アラート】{} が理論株価({:.2}$)から{:.2}%割安の {:.2}$ に到達しました！（目標割安率: {:.0}%）",
+                    w.ticker,
+                    tp.base_price,
+                    div_rate.abs(),
+                    fin.current_price,
+                    w.target_discount_rate
+                );
+                line.send_and_log(&pool, &w.ticker, "UNDERVALUED", &alert_msg)
+                    .await?;
+                alerts_triggered += 1;
+                messages.push(alert_msg);
+            }
+
+            let news = fmp.fetch_news(&w.ticker).await;
+            let summary_ja = llm
+                .summarize_news(&w.ticker, &w.company_name, &news)
+                .await;
+
+            let news_msg = format!(
+                "📰【モーニングニュース要約】{} ({})\n現在株価: ${:.2} / 理論株価(Base): ${:.2} ({:+.2}%)\n\n{}",
+                w.company_name, w.ticker, fin.current_price, tp.base_price, div_rate, summary_ja
             );
-            state
-                .line
-                .send_and_log(&state.pool, &w.ticker, "UNDERVALUED", &alert_msg)
+            line.send_and_log(&pool, &w.ticker, "NEWS_SUMMARY", &news_msg)
                 .await?;
             alerts_triggered += 1;
-            messages.push(alert_msg);
-        }
+            messages.push(news_msg);
 
-        let news = state.fmp.fetch_news(&w.ticker).await;
-        let summary_ja = state
-            .llm
-            .summarize_news(&w.ticker, &w.company_name, &news)
-            .await;
+            Ok((idx, alerts_triggered, messages))
+        });
+    }
 
-        let news_msg = format!(
-            "📰【モーニングニュース要約】{} ({})\n現在株価: ${:.2} / 理論株価(Base): ${:.2} ({:+.2}%)\n\n{}",
-            w.company_name, w.ticker, fin.current_price, tp.base_price, div_rate, summary_ja
-        );
-        state
-            .line
-            .send_and_log(&state.pool, &w.ticker, "NEWS_SUMMARY", &news_msg)
-            .await?;
-        alerts_triggered += 1;
-        messages.push(news_msg);
+    let mut ordered_results = Vec::new();
+    while let Some(res) = join_set.join_next().await {
+        ordered_results.push(res??);
+    }
+    ordered_results.sort_by_key(|(idx, _, _)| *idx);
+
+    let mut alerts_triggered = 0usize;
+    let mut messages = Vec::new();
+    for (_, count, msgs) in ordered_results {
+        alerts_triggered += count;
+        messages.extend(msgs);
     }
 
     Ok(JobSummaryResponse {

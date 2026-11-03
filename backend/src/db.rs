@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{NaiveDate, Utc};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tracing::info;
@@ -353,7 +355,58 @@ pub async fn build_watchlist_item_response(
         return Ok(None);
     };
     let dp = get_latest_daily_price(pool, &w.ticker).await?;
-    let current_price = dp.as_ref().map(|d| d.close_price).unwrap_or(tp.base_price);
+    Ok(Some(build_watchlist_item_from_parts(w, &tp, dp.as_ref())))
+}
+
+/// Batch version of [`get_latest_theoretical_price`]: one query for many tickers.
+pub async fn get_latest_theoretical_prices(
+    pool: &PgPool,
+    tickers: &[String],
+) -> anyhow::Result<HashMap<String, TheoreticalPriceRow>> {
+    let rows = sqlx::query_as::<_, TheoreticalPriceRow>(
+        r#"
+        SELECT DISTINCT ON (ticker)
+               id, ticker, trigger_type, base_price, bull_price, bear_price,
+               net_cash, free_cash_flow, shares_outstanding,
+               wacc, growth_rate_base, growth_rate_bull, growth_rate_bear,
+               terminal_growth_rate, reasoning_ja, calculated_at
+        FROM theoretical_prices
+        WHERE ticker = ANY($1)
+        ORDER BY ticker, calculated_at DESC, id DESC
+        "#,
+    )
+    .bind(tickers)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.ticker.clone(), r)).collect())
+}
+
+/// Batch version of [`get_latest_daily_price`]: one query for many tickers.
+pub async fn get_latest_daily_prices(
+    pool: &PgPool,
+    tickers: &[String],
+) -> anyhow::Result<HashMap<String, DailyPriceRow>> {
+    let rows = sqlx::query_as::<_, DailyPriceRow>(
+        r#"
+        SELECT DISTINCT ON (ticker)
+               id, ticker, trade_date, close_price, divergence_rate, created_at
+        FROM daily_prices
+        WHERE ticker = ANY($1)
+        ORDER BY ticker, trade_date DESC, id DESC
+        "#,
+    )
+    .bind(tickers)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.ticker.clone(), r)).collect())
+}
+
+pub fn build_watchlist_item_from_parts(
+    w: &WatchlistRow,
+    tp: &TheoreticalPriceRow,
+    dp: Option<&DailyPriceRow>,
+) -> WatchlistItemResponse {
+    let current_price = dp.map(|d| d.close_price).unwrap_or(tp.base_price);
     let divergence_rate = dcf::calculate_divergence_rate(current_price, tp.base_price);
     let is_undervalued_alert =
         dcf::is_undervalued(current_price, tp.base_price, w.target_discount_rate);
@@ -367,7 +420,7 @@ pub async fn build_watchlist_item_response(
         tp.terminal_growth_rate,
     );
 
-    Ok(Some(WatchlistItemResponse {
+    WatchlistItemResponse {
         ticker: w.ticker.clone(),
         company_name: w.company_name.clone(),
         target_discount_rate: w.target_discount_rate,
@@ -386,10 +439,10 @@ pub async fn build_watchlist_item_response(
         net_cash: tp.net_cash,
         free_cash_flow: tp.free_cash_flow,
         shares_outstanding: tp.shares_outstanding,
-        reasoning_ja: tp.reasoning_ja,
+        reasoning_ja: tp.reasoning_ja.clone(),
         last_earnings_date: w.last_earnings_date,
         calculated_at: tp.calculated_at,
-    }))
+    }
 }
 
 pub async fn seed_initial_data_if_empty(

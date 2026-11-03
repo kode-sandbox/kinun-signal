@@ -28,3 +28,11 @@ basic_auth_password = "CHANGE_ME_STRONG_PASSWORD"
 daily_check_cron    = "30 6 * * 2-6"
 earnings_check_cron = "35 6 * * 2-6"
 scheduler_timezone  = "Asia/Tokyo"
+
+# Cloud Monitoring Uptime Check & Alerting (Slack / Email)
+uptime_check_path              = "/api/system/info" # or "/healthz" for Frontend-only shallow check
+uptime_check_period            = "300s"             # 5-minute interval
+alert_slack_channel_name       = ""                 # Pattern 1 (Bot Token): e.g. "#alerts"
+alert_slack_bot_token          = ""                 # Pattern 1 (Bot Token): e.g. "xoxb-..."
+alert_notification_channel_ids = []                 # Pattern 2 (GCP Console Slack OAuth): e.g. ["projects/YOUR_PROJECT/notificationChannels/12345"]
+alert_notification_email       = ""                 # Optional Email fallback: e.g. "your-email@example.com"

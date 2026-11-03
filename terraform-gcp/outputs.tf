@@ -40,3 +40,13 @@ output "earnings_check_scheduler_job" {
   description = "Cloud Scheduler job name for Quarterly Earnings Check"
   value       = google_cloud_scheduler_job.earnings_check.name
 }
+
+output "workload_identity_provider" {
+  description = "Workload Identity Provider resource name for GitHub Actions OIDC authentication"
+  value       = google_iam_workload_identity_pool_provider.github_provider.name
+}
+
+output "github_deployer_service_account" {
+  description = "Service Account email for GitHub Actions deployments"
+  value       = google_service_account.github_deployer_sa.email
+}

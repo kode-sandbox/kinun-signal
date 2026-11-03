@@ -114,3 +114,9 @@ variable "scheduler_timezone" {
   default     = "Asia/Tokyo"
   description = "Time zone for Cloud Scheduler cron jobs"
 }
+
+variable "github_repositories" {
+  type        = list(string)
+  default     = ["kode-sandbox/kinun-signal", "kodai-Java/kinun-signal"]
+  description = "GitHub repositories (owner/repo) allowed to authenticate via Workload Identity Federation (OIDC)"
+}

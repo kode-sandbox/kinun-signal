@@ -116,6 +116,14 @@ resource "google_cloud_run_v2_service" "backend" {
     google_secret_manager_secret_version.app_secret_versions,
     google_secret_manager_secret_iam_member.backend_secret_access,
   ]
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -186,4 +194,12 @@ resource "google_cloud_run_v2_service" "frontend" {
     google_secret_manager_secret_version.app_secret_versions,
     google_secret_manager_secret_iam_member.frontend_secret_access,
   ]
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }

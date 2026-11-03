@@ -1,6 +1,8 @@
 locals {
   required_apis = [
     "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "sts.googleapis.com",
     "artifactregistry.googleapis.com",
     "secretmanager.googleapis.com",
     "run.googleapis.com",

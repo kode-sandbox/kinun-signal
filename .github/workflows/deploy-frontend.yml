@@ -9,11 +9,21 @@ on:
       - '.github/workflows/deploy-frontend.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   PROJECT_ID: kinun-signal
   REGION: asia-northeast1
-  IMAGE_NAME: asia-northeast1-docker.pkg.dev/kinun-signal/kinun-signal-images/frontend:latest
+  IMAGE_REPO: asia-northeast1-docker.pkg.dev/kinun-signal/kinun-signal-images/frontend
   SERVICE_NAME: kinun-signal-frontend
+  WORKLOAD_IDENTITY_PROVIDER: projects/1374820143/locations/global/workloadIdentityPools/kinun-signal-github-pool/providers/github-provider
+  SERVICE_ACCOUNT: kinun-signal-github-deployer@kinun-signal.iam.gserviceaccount.com
 
 jobs:
   deploy:
@@ -23,10 +33,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Google Cloud Auth
+      - name: Google Cloud Auth (Keyless OIDC)
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -45,13 +56,15 @@ jobs:
           file: ./frontend/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.IMAGE_NAME }}
+          tags: |
+            ${{ env.IMAGE_REPO }}:latest
+            ${{ env.IMAGE_REPO }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image ${{ env.IMAGE_NAME }} \
+            --image ${{ env.IMAGE_REPO }}:${{ github.sha }} \
             --region ${{ env.REGION }} \
             --project ${{ env.PROJECT_ID }}

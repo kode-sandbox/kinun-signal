@@ -62,6 +62,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Scan the exact image that is about to ship. If a fixable
+      # CRITICAL/HIGH vulnerability is found, this step fails and the
+      # deploy below never runs.
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          image-ref: ${{ env.IMAGE_REPO }}:${{ github.sha }}
+          ignore-unfixed: true
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \

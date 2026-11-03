@@ -1,15 +1,40 @@
 name: Trivy Vulnerability Scanner
 
 on:
+  # Weekly run: new CVEs are disclosed against unchanged code, so the
+  # schedule is what turns Trivy into an upgrade reminder.
+  schedule:
+    - cron: '0 0 * * 1' # Monday 09:00 JST
+  # Otherwise, only run when the scanned surfaces actually change.
   push:
     branches: [ main ]
+    paths:
+      - 'backend/Cargo.toml'
+      - 'backend/Cargo.lock'
+      - 'backend/Dockerfile'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/Dockerfile'
+      - '.github/workflows/trivy.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'backend/Cargo.toml'
+      - 'backend/Cargo.lock'
+      - 'backend/Dockerfile'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/Dockerfile'
+      - '.github/workflows/trivy.yml'
+  workflow_dispatch:
 
 jobs:
   trivy-scan:
     name: Run Trivy Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # for the failure notification issue below
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -72,3 +97,44 @@ jobs:
           format: 'table'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
+
+      # If any scan above fails, open an issue (or comment on the one
+      # already open) so the finding is not lost in the Actions tab.
+      - name: Open an issue when the scan fails
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const title = '🔒 Trivy scan failed: vulnerabilities need attention';
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              creator: 'github-actions[bot]',
+              per_page: 30,
+            });
+            const existing = issues.find((i) => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `Trivy scan failed again. Latest run: ${runUrl}`,
+              });
+              core.info(`Commented on existing issue #${existing.number}`);
+            } else {
+              const { data: created } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body: [
+                  'The Trivy vulnerability scan failed, which means fixable CRITICAL/HIGH vulnerabilities were detected (or the scan itself errored).',
+                  '',
+                  `Run: ${runUrl}`,
+                  '',
+                  'Check the workflow log for the affected packages, update them, and close this issue once a scan passes again.',
+                ].join('\n'),
+              });
+              core.info(`Created issue #${created.number}`);
+            }

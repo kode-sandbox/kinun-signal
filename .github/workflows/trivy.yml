@@ -40,6 +40,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner in repo mode
+        id: scan-fs
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
@@ -67,6 +69,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner on backend image
+        id: scan-backend-image
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'image'
@@ -89,6 +93,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner on frontend image
+        id: scan-frontend-image
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'image'
@@ -98,14 +104,21 @@ jobs:
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
 
-      # If any scan above fails, open an issue (or comment on the one
-      # already open) so the finding is not lost in the Actions tab.
-      - name: Open an issue when the scan fails
-        if: failure()
+      # Open an issue only when a scan step actually detected
+      # vulnerabilities (its exit code fired) — not when the workflow
+      # failed for other reasons such as a build error. If an issue with
+      # the same title is already open, comment on it instead.
+      - name: Open an issue when vulnerabilities are detected
+        if: steps.scan-fs.outcome == 'failure' || steps.scan-backend-image.outcome == 'failure' || steps.scan-frontend-image.outcome == 'failure'
         uses: actions/github-script@v7
         with:
           script: |
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const failedTargets = [
+              ['${{ steps.scan-fs.outcome }}', 'repository (fs) scan'],
+              ['${{ steps.scan-backend-image.outcome }}', 'backend image scan'],
+              ['${{ steps.scan-frontend-image.outcome }}', 'frontend image scan'],
+            ].filter(([outcome]) => outcome === 'failure').map(([, label]) => label);
             const title = '🔒 Trivy scan failed: vulnerabilities need attention';
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -120,7 +133,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: existing.number,
-                body: `Trivy scan failed again. Latest run: ${runUrl}`,
+                body: `Trivy detected vulnerabilities again (${failedTargets.join(', ')}). Latest run: ${runUrl}`,
               });
               core.info(`Commented on existing issue #${existing.number}`);
             } else {
@@ -129,8 +142,9 @@ jobs:
                 repo: context.repo.repo,
                 title,
                 body: [
-                  'The Trivy vulnerability scan failed, which means fixable CRITICAL/HIGH vulnerabilities were detected (or the scan itself errored).',
+                  'Trivy detected fixable CRITICAL/HIGH vulnerabilities.',
                   '',
+                  `Detected in: ${failedTargets.join(', ')}`,
                   `Run: ${runUrl}`,
                   '',
                   'Check the workflow log for the affected packages, update them, and close this issue once a scan passes again.',
@@ -138,3 +152,10 @@ jobs:
               });
               core.info(`Created issue #${created.number}`);
             }
+
+      # The scan steps use continue-on-error so that all of them run and
+      # the issue step above can fire; fail the job here instead whenever
+      # any scan detected vulnerabilities.
+      - name: Fail the job if any scan detected vulnerabilities
+        if: always() && (steps.scan-fs.outcome == 'failure' || steps.scan-backend-image.outcome == 'failure' || steps.scan-frontend-image.outcome == 'failure')
+        run: exit 1

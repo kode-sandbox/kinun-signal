@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bell,
   CheckCircle2,
@@ -15,6 +15,11 @@ import StockCard from "@/components/StockCard";
 import StockDetailModal from "@/components/StockDetailModal";
 import AddStockModal from "@/components/AddStockModal";
 import { AlertLog, JobSummaryResponse, WatchlistItem } from "@/types/stock";
+import {
+  loadDashboardCache,
+  removeTickerFromDashboardCache,
+  saveDashboardCache,
+} from "@/lib/dashboardCache";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -99,6 +104,9 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<AlertLog[]>([]);
   const [llmModel, setLlmModel] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+  const [cacheSavedAt, setCacheSavedAt] = useState<number | null>(null);
+  const [cacheRefreshFailed, setCacheRefreshFailed] = useState<boolean>(false);
+  const showingCacheRef = useRef<boolean>(false);
   const [isDailyLoading, setIsDailyLoading] = useState<boolean>(false);
   const [isEarningsLoading, setIsEarningsLoading] = useState<boolean>(false);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
@@ -161,13 +169,25 @@ export default function DashboardPage() {
       setWatchlist(wData);
       setAlerts(aData);
 
+      let model: string | null = null;
       if (sysRes && sysRes.ok) {
         const sysData = await sysRes.json();
         if (sysData.llm_model) {
-          setLlmModel(sysData.llm_model);
+          model = sysData.llm_model;
+          setLlmModel(model);
         }
       }
+
+      // Persist only real backend data so the next visit can render it
+      // instantly from the browser cache while revalidating.
+      saveDashboardCache({ watchlist: wData, alerts: aData, llmModel: model });
+      showingCacheRef.current = false;
+      setCacheSavedAt(null);
+      setCacheRefreshFailed(false);
     } catch {
+      if (showingCacheRef.current) {
+        setCacheRefreshFailed(true);
+      }
       // Fallback to realistic seeded state if backend is not yet started
       setWatchlist((prev) => (prev.length > 0 ? prev : FALLBACK_WATCHLIST));
       setAlerts((prev) => (prev.length > 0 ? prev : FALLBACK_ALERTS));
@@ -177,6 +197,19 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    // Hydrate from the browser cache first for an instant first paint,
+    // then revalidate against the backend in the background.
+    const cached = loadDashboardCache();
+    if (cached) {
+      setWatchlist(cached.watchlist);
+      setAlerts(cached.alerts);
+      if (cached.llmModel) {
+        setLlmModel(cached.llmModel);
+      }
+      setIsInitialLoading(false);
+      setCacheSavedAt(cached.savedAt);
+      showingCacheRef.current = true;
+    }
     fetchDashboardData();
   }, [fetchDashboardData]);
 
@@ -466,6 +499,15 @@ export default function DashboardPage() {
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Left / Center Column (Width 2/3): Watchlist Stock Cards Grid */}
           <div className="space-y-4 lg:col-span-2">
+            {cacheSavedAt !== null && (
+              <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                前回データを表示中（最終取得:{" "}
+                {new Date(cacheSavedAt).toLocaleString("ja-JP")}）
+                {cacheRefreshFailed
+                  ? "・最新データの取得に失敗しました"
+                  : "・最新データを取得中…"}
+              </p>
+            )}
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-white sm:text-lg">
@@ -618,6 +660,7 @@ export default function DashboardPage() {
           setWatchlist((prev) =>
             prev.filter((item) => item.ticker !== deletedTicker)
           );
+          removeTickerFromDashboardCache(deletedTicker);
           showToast(`🗑️ ${deletedTicker} をウォッチリストから削除しました`);
         }}
       />

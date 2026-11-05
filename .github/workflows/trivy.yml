@@ -16,16 +16,8 @@ on:
       - 'frontend/package-lock.json'
       - 'frontend/Dockerfile'
       - '.github/workflows/trivy.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'backend/Cargo.toml'
-      - 'backend/Cargo.lock'
-      - 'backend/Dockerfile'
-      - 'frontend/package.json'
-      - 'frontend/package-lock.json'
-      - 'frontend/Dockerfile'
-      - '.github/workflows/trivy.yml'
+  # Pull requests are intentionally NOT scanned: detection happens on the
+  # push to main after merge (and weekly), so PR checks stay clean.
   workflow_dispatch:
 
 jobs:

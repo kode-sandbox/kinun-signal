@@ -5,3 +5,7 @@ target/
 .env*.local
 *.local
 
+
+# Playwright
+test-results/
+playwright-report/

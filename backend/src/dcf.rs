@@ -233,7 +233,7 @@ pub fn calculate_auto_terminal_growth(
     }
 
     // 永久成長率は経済合理性から最大4.0%、かつ WACC - 2.0% 以下に制限
-    let max_allowed = (wacc - 0.020).min(0.040).max(0.015);
+    let max_allowed = (wacc - 0.020).clamp(0.015, 0.040);
     round_three_decimals(gt.clamp(0.015, max_allowed))
 }
 
@@ -377,7 +377,7 @@ mod tests {
             total_debt: 0.0,
             free_cash_flow: 100.0,
             shares_outstanding: 10.0,
-            wacc: 0.01,                 // Should be clamped to 0.04
+            wacc: 0.01, // Should be clamped to 0.04
             growth_rate_base: 0.05,
             growth_rate_bull: 0.08,
             growth_rate_bear: 0.02,
@@ -400,7 +400,7 @@ mod tests {
             Some(3_800_000_000.0),
             Some(0.16),
         );
-        assert!(wacc_comp.wacc >= 0.055 && wacc_comp.wacc <= 0.145);
+        assert!((0.055..=0.145).contains(&wacc_comp.wacc));
         assert!(wacc_comp.equity_weight > 0.90);
 
         let gt = calculate_auto_terminal_growth(
@@ -410,7 +410,7 @@ mod tests {
             Some(400_000_000_000.0),
             Some(0.09),
         );
-        assert!(gt >= 0.015 && gt <= 0.040);
+        assert!((0.015..=0.040).contains(&gt));
 
         let target_g = 0.125;
         let model_price = calculate_scenario_price(

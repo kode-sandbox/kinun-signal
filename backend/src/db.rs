@@ -1,14 +1,18 @@
 use std::collections::HashMap;
 
 use chrono::{NaiveDate, Utc};
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use tracing::info;
 
 use crate::dcf::{self, DcfInput, DcfOutput};
 use crate::models::{
     AlertLogRow, DailyPriceRow, TheoreticalPriceRow, WatchlistItemResponse, WatchlistRow,
 };
-use crate::services::{fmp::FmpClient, line::LineClient, llm::{LlmClient, LlmDcfParams}};
+use crate::services::{
+    fmp::FmpClient,
+    line::LineClient,
+    llm::{LlmClient, LlmDcfParams},
+};
 
 pub async fn init_pool(database_url: &str) -> anyhow::Result<PgPool> {
     // Attempt to connect to the PostgreSQL database with retries, handling the case where the container
@@ -21,20 +25,31 @@ pub async fn init_pool(database_url: &str) -> anyhow::Result<PgPool> {
         match PgPoolOptions::new()
             .max_connections(10)
             .connect(database_url)
-            .await {
+            .await
+        {
             Ok(p) => {
                 pool = Some(p);
                 break;
             }
             Err(e) => {
-                tracing::warn!("Database connection attempt {}/{} failed: {}", attempts, max_attempts, e);
+                tracing::warn!(
+                    "Database connection attempt {}/{} failed: {}",
+                    attempts,
+                    max_attempts,
+                    e
+                );
                 // Exponential backoff: increase wait time up to 5 seconds.
                 let wait_secs = std::cmp::min(2 * attempts as u64, 5);
                 tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
             }
         }
     }
-    let pool = pool.ok_or_else(|| anyhow::anyhow!("Failed to connect to PostgreSQL after {} attempts", max_attempts))?;
+    let pool = pool.ok_or_else(|| {
+        anyhow::anyhow!(
+            "Failed to connect to PostgreSQL after {} attempts",
+            max_attempts
+        )
+    })?;
 
     // Run migrations after establishing the connection.
     sqlx::migrate!("./migrations").run(&pool).await?;
@@ -328,10 +343,7 @@ pub async fn get_recent_alerts(pool: &PgPool, limit: i64) -> anyhow::Result<Vec<
     Ok(rows)
 }
 
-pub async fn get_alerts_by_ticker(
-    pool: &PgPool,
-    ticker: &str,
-) -> anyhow::Result<Vec<AlertLogRow>> {
+pub async fn get_alerts_by_ticker(pool: &PgPool, ticker: &str) -> anyhow::Result<Vec<AlertLogRow>> {
     let rows = sqlx::query_as::<_, AlertLogRow>(
         r#"
         SELECT id, ticker, alert_type, message, sent_at
@@ -469,7 +481,10 @@ pub async fn seed_initial_data_if_empty(
                 None => true,
             };
             if needs_upgrade {
-                info!("Upgrading valuation for existing stock {} with live Yahoo Finance data...", w.ticker);
+                info!(
+                    "Upgrading valuation for existing stock {} with live Yahoo Finance data...",
+                    w.ticker
+                );
                 let fin = fmp.fetch_financials(&w.ticker).await;
                 let news = fmp.fetch_news(&w.ticker).await;
                 upsert_watchlist(
@@ -503,7 +518,8 @@ pub async fn seed_initial_data_if_empty(
                     &params,
                 )
                 .await?;
-                let div_rate = dcf::calculate_divergence_rate(fin.current_price, dcf_out.base_price);
+                let div_rate =
+                    dcf::calculate_divergence_rate(fin.current_price, dcf_out.base_price);
                 upsert_daily_price(pool, &fin.ticker, today, fin.current_price, div_rate).await?;
             }
         }

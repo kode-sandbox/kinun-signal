@@ -14,9 +14,9 @@ pub struct StockFinancials {
     pub current_price: f64,
     pub cash_and_short_term_investments: f64,
     pub total_debt: f64,
-    pub free_cash_flow: f64,        // 直近TTMまたは通期FCF
-    pub fcf_history: Vec<f64>,      // 過去FCF推移（直近から過去順）
-    pub revenue_history: Vec<f64>,  // 過去売上推移（直近から過去順）
+    pub free_cash_flow: f64,       // 直近TTMまたは通期FCF
+    pub fcf_history: Vec<f64>,     // 過去FCF推移（直近から過去順）
+    pub revenue_history: Vec<f64>, // 過去売上推移（直近から過去順）
     pub shares_outstanding: f64,
     pub latest_earnings_date: Option<NaiveDate>,
     pub eps_actual: Option<f64>,
@@ -224,7 +224,9 @@ impl FmpClient {
         }
 
         let mut fin = Self::mock_financials(&symbol);
-        if let Ok((real_price, real_name, _)) = self.fetch_chart_with_closes(&symbol, "1y", "1mo").await {
+        if let Ok((real_price, real_name, _)) =
+            self.fetch_chart_with_closes(&symbol, "1y", "1mo").await
+        {
             fin.current_price = real_price;
             if let Some(name) = real_name {
                 fin.company_name = name;
@@ -233,7 +235,10 @@ impl FmpClient {
         fin
     }
 
-    pub async fn fetch_financials_from_yahoo(&self, symbol: &str) -> anyhow::Result<StockFinancials> {
+    pub async fn fetch_financials_from_yahoo(
+        &self,
+        symbol: &str,
+    ) -> anyhow::Result<StockFinancials> {
         let (stock_chart_res, sp500_chart_res, tnx_res, ts_res) = tokio::join!(
             self.fetch_chart_with_closes(symbol, "5y", "1mo"),
             self.fetch_chart_with_closes("^GSPC", "5y", "1mo"),
@@ -266,11 +271,14 @@ impl FmpClient {
 
         let risk_free_rate = tnx_res.ok();
 
-        let cash = latest_ts_val(&ts_map, "quarterlyCashCashEquivalentsAndShortTermInvestments")
-            .or_else(|| latest_ts_val(&ts_map, "annualCashCashEquivalentsAndShortTermInvestments"))
-            .or_else(|| latest_ts_val(&ts_map, "quarterlyCashAndCashEquivalents"))
-            .or_else(|| latest_ts_val(&ts_map, "annualCashAndCashEquivalents"))
-            .unwrap_or(0.0);
+        let cash = latest_ts_val(
+            &ts_map,
+            "quarterlyCashCashEquivalentsAndShortTermInvestments",
+        )
+        .or_else(|| latest_ts_val(&ts_map, "annualCashCashEquivalentsAndShortTermInvestments"))
+        .or_else(|| latest_ts_val(&ts_map, "quarterlyCashAndCashEquivalents"))
+        .or_else(|| latest_ts_val(&ts_map, "annualCashAndCashEquivalents"))
+        .unwrap_or(0.0);
 
         let total_debt = latest_ts_val(&ts_map, "quarterlyTotalDebt")
             .or_else(|| latest_ts_val(&ts_map, "annualTotalDebt"))
@@ -278,7 +286,10 @@ impl FmpClient {
 
         // ② 基準FCFの算出と、一時的CapEx急増によるFCFマイナス／急減時の正規化補正（AMZN等のAIデータセンター投資期対応）
         let ttm_fcf_pt = latest_ts_point(&ts_map, "trailingFreeCashFlow");
-        let annual_fcf_pts = ts_map.get("annualFreeCashFlow").cloned().unwrap_or_default();
+        let annual_fcf_pts = ts_map
+            .get("annualFreeCashFlow")
+            .cloned()
+            .unwrap_or_default();
         let ttm_ocf_pt = latest_ts_point(&ts_map, "trailingOperatingCashFlow");
         let annual_ocf_pts = ts_map
             .get("annualOperatingCashFlow")
@@ -295,7 +306,10 @@ impl FmpClient {
 
         // Build Revenue history (latest first)
         let ttm_rev_pt = latest_ts_point(&ts_map, "trailingTotalRevenue");
-        let annual_rev_pts = ts_map.get("annualTotalRevenue").cloned().unwrap_or_default();
+        let annual_rev_pts = ts_map
+            .get("annualTotalRevenue")
+            .cloned()
+            .unwrap_or_default();
         let mut revenue_history: Vec<f64> = Vec::new();
         if let Some(ttm) = &ttm_rev_pt {
             if annual_rev_pts
@@ -317,7 +331,10 @@ impl FmpClient {
             .unwrap_or(0.0);
 
         if shares_outstanding <= 0.0 && free_cash_flow == 0.0 && cash == 0.0 {
-            anyhow::bail!("No fundamental financial statement rows returned from Yahoo Finance for {}", symbol);
+            anyhow::bail!(
+                "No fundamental financial statement rows returned from Yahoo Finance for {}",
+                symbol
+            );
         }
 
         let interest_expense = latest_ts_val(&ts_map, "trailingInterestExpense")
@@ -429,13 +446,14 @@ impl FmpClient {
         }
 
         // GBp / GBX (British Pence: 100 pence = 1 GBP), ILA (Israeli Agorot: 100 agorot = 1 ILS)
-        let (lookup_curr, subunit_multiplier) = if raw_curr == "GBp" || raw_curr.eq_ignore_ascii_case("GBX") {
-            ("GBP".to_string(), 100.0)
-        } else if raw_curr.eq_ignore_ascii_case("ILA") {
-            ("ILS".to_string(), 100.0)
-        } else {
-            (raw_curr.to_uppercase(), 1.0)
-        };
+        let (lookup_curr, subunit_multiplier) =
+            if raw_curr == "GBp" || raw_curr.eq_ignore_ascii_case("GBX") {
+                ("GBP".to_string(), 100.0)
+            } else if raw_curr.eq_ignore_ascii_case("ILA") {
+                ("ILS".to_string(), 100.0)
+            } else {
+                (raw_curr.to_uppercase(), 1.0)
+            };
 
         let fx_symbol = format!("{}=X", lookup_curr);
         if let Ok((rate, _, _)) = self.fetch_chart_with_closes(&fx_symbol, "5d", "1d").await {
@@ -614,60 +632,68 @@ impl FmpClient {
         let base = "https://financialmodelingprep.com/api/v3";
 
         let profile_url = format!("{}/profile/{}?apikey={}", base, symbol, key);
-        let bs_url = format!("{}/balance-sheet-statement/{}?limit=1&apikey={}", base, symbol, key);
-        let cf_url = format!("{}/cash-flow-statement/{}?limit=4&apikey={}", base, symbol, key);
-        let pl_url = format!("{}/income-statement/{}?limit=4&apikey={}", base, symbol, key);
+        let bs_url = format!(
+            "{}/balance-sheet-statement/{}?limit=1&apikey={}",
+            base, symbol, key
+        );
+        let cf_url = format!(
+            "{}/cash-flow-statement/{}?limit=4&apikey={}",
+            base, symbol, key
+        );
+        let pl_url = format!(
+            "{}/income-statement/{}?limit=4&apikey={}",
+            base, symbol, key
+        );
         let earnings_url = format!("{}/earnings-surprises/{}?apikey={}", base, symbol, key);
 
         // All six requests are independent: fire them concurrently and apply
         // the same per-response validation afterwards, in the original order.
-        let (profiles_res, bs_res, cf_res, pl_res, latest_earning, risk_free_rate_res) =
-            tokio::join!(
-                async {
-                    self.http
-                        .get(&profile_url)
-                        .send()
-                        .await?
-                        .json::<Vec<FmpProfileItem>>()
+        let (profiles_res, bs_res, cf_res, pl_res, latest_earning, risk_free_rate_res) = tokio::join!(
+            async {
+                self.http
+                    .get(&profile_url)
+                    .send()
+                    .await?
+                    .json::<Vec<FmpProfileItem>>()
+                    .await
+            },
+            async {
+                self.http
+                    .get(&bs_url)
+                    .send()
+                    .await?
+                    .json::<Vec<FmpBalanceSheetItem>>()
+                    .await
+            },
+            async {
+                self.http
+                    .get(&cf_url)
+                    .send()
+                    .await?
+                    .json::<Vec<FmpCashFlowItem>>()
+                    .await
+            },
+            async {
+                self.http
+                    .get(&pl_url)
+                    .send()
+                    .await?
+                    .json::<Vec<FmpIncomeItem>>()
+                    .await
+            },
+            async {
+                match self.http.get(&earnings_url).send().await {
+                    Ok(resp) => resp
+                        .json::<Vec<FmpEarningsSurpriseItem>>()
                         .await
-                },
-                async {
-                    self.http
-                        .get(&bs_url)
-                        .send()
-                        .await?
-                        .json::<Vec<FmpBalanceSheetItem>>()
-                        .await
-                },
-                async {
-                    self.http
-                        .get(&cf_url)
-                        .send()
-                        .await?
-                        .json::<Vec<FmpCashFlowItem>>()
-                        .await
-                },
-                async {
-                    self.http
-                        .get(&pl_url)
-                        .send()
-                        .await?
-                        .json::<Vec<FmpIncomeItem>>()
-                        .await
-                },
-                async {
-                    match self.http.get(&earnings_url).send().await {
-                        Ok(resp) => resp
-                            .json::<Vec<FmpEarningsSurpriseItem>>()
-                            .await
-                            .unwrap_or_default()
-                            .into_iter()
-                            .next(),
-                        Err(_) => None,
-                    }
-                },
-                self.fetch_ten_year_treasury_yield(),
-            );
+                        .unwrap_or_default()
+                        .into_iter()
+                        .next(),
+                    Err(_) => None,
+                }
+            },
+            self.fetch_ten_year_treasury_yield(),
+        );
 
         let profiles: Vec<FmpProfileItem> = profiles_res?;
         let profile = profiles
@@ -692,11 +718,15 @@ impl FmpClient {
         }
 
         // ① 外国通貨建て財務諸表の米ドル換算
-        let reported_curr = [&cf_list[0].reported_currency, &bs.reported_currency, &pl_list[0].reported_currency]
-            .into_iter()
-            .find(|c| !c.trim().is_empty())
-            .cloned()
-            .unwrap_or_else(|| "USD".to_string());
+        let reported_curr = [
+            &cf_list[0].reported_currency,
+            &bs.reported_currency,
+            &pl_list[0].reported_currency,
+        ]
+        .into_iter()
+        .find(|c| !c.trim().is_empty())
+        .cloned()
+        .unwrap_or_else(|| "USD".to_string());
         let fx_rate = if !reported_curr.eq_ignore_ascii_case("USD") {
             self.fetch_fx_rate_to_usd(&reported_curr).await.max(1e-6)
         } else {
@@ -968,7 +998,10 @@ fn detect_reporting_currency(map: &HashMap<String, Vec<TimeseriesPoint>>) -> Opt
 }
 
 /// 株式数・税率以外のすべての金額ベース時系列データを指定レート（現地通貨 / 1 USD）で米ドル換算する
-fn convert_timeseries_to_usd(map: &mut HashMap<String, Vec<TimeseriesPoint>>, fx_rate_per_usd: f64) {
+fn convert_timeseries_to_usd(
+    map: &mut HashMap<String, Vec<TimeseriesPoint>>,
+    fx_rate_per_usd: f64,
+) {
     if fx_rate_per_usd <= 0.0 || (fx_rate_per_usd - 1.0).abs() <= 1e-6 {
         return;
     }
@@ -1083,8 +1116,7 @@ fn normalize_fcf_and_history(
     // 3. 一時的CapEx急増によるFCFマイナス／急減の判定
     // - raw_fcf <= 0.0 (AMZN等、直近TTMのAI設備投資でFCFが一時的にマイナス転落したケース)
     // - または 営業CFが黒字かつ raw_fcf が営業CFの15%未満に急減しているケース
-    let is_capex_depressed =
-        raw_fcf <= 0.0 || (latest_ocf > 0.0 && raw_fcf < latest_ocf * 0.15);
+    let is_capex_depressed = raw_fcf <= 0.0 || (latest_ocf > 0.0 && raw_fcf < latest_ocf * 0.15);
 
     if !is_capex_depressed {
         return (raw_fcf, fcf_history);
@@ -1179,7 +1211,10 @@ fn normalize_fcf_and_history(
     let mut normalized_history = Vec::new();
     normalized_history.push(normalized_fcf);
     for pt in annual_fcf_pts.iter().rev() {
-        let yr_ocf = ocf_by_date.get(pt.as_of_date.as_str()).copied().unwrap_or(0.0);
+        let yr_ocf = ocf_by_date
+            .get(pt.as_of_date.as_str())
+            .copied()
+            .unwrap_or(0.0);
         if pt.raw_value > 0.0 && (yr_ocf <= 0.0 || pt.raw_value >= yr_ocf * 0.15) {
             normalized_history.push(pt.raw_value);
         } else if yr_ocf > 0.0 {
@@ -1333,7 +1368,11 @@ mod tests {
             "Fetched AMZN Price: ${:.2}, Normalized FCF(USD): ${:.2}B, FCF History: {:?}",
             amzn_fin.current_price,
             amzn_fin.free_cash_flow / 1e9,
-            amzn_fin.fcf_history.iter().map(|v| format!("${:.1}B", v / 1e9)).collect::<Vec<_>>()
+            amzn_fin
+                .fcf_history
+                .iter()
+                .map(|v| format!("${:.1}B", v / 1e9))
+                .collect::<Vec<_>>()
         );
         assert!(amzn_fin.free_cash_flow > 20_000_000_000.0);
     }

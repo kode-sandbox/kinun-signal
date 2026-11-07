@@ -1,0 +1,107 @@
+name: CI Quality & Smoke Harness
+
+# AI Development Quality Gate:
+# 1. Forbidden placeholder check (no TODO / unimplemented!)
+# 2. Backend Rust formatting, Clippy (-D warnings + unwrap_used denied), and unit tests
+# 3. Frontend Next.js TypeScript & production build check
+# 4. End-to-End API Smoke Test with PostgreSQL service in Mock/Fallback mode
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-and-smoke:
+    name: Backend Lint, Unit Test & API Smoke Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: stock_analyst
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d stock_analyst"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Check for forbidden placeholders (TODO / unimplemented!)
+        run: make check-no-todo
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./backend -> target"
+
+      - name: Run Backend Format, Clippy & Unit Tests
+        run: make check-backend
+
+      - name: Start Backend in Mock Mode & Run API Smoke Test
+        env:
+          DATABASE_URL: postgres://postgres:password@localhost:5432/stock_analyst
+          BACKEND_PORT: 8080
+          FMP_API_KEY: mock_fmp_key
+          LLM_API_BASE_URL: https://api.openai.com/v1
+          LLM_API_KEY: mock_llm_key
+          LLM_MODEL: argon
+          LINE_CHANNEL_ACCESS_TOKEN: mock_line_token
+          LINE_USER_ID: mock_line_user_id
+          ENABLE_INTERNAL_SCHEDULER: "false"
+        run: |
+          ./backend/target/debug/stock_analyst_backend &
+          BACKEND_PID=$!
+          trap "kill $BACKEND_PID 2>/dev/null || true" EXIT
+          make smoke
+
+  frontend-build:
+    name: Frontend Typecheck & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run Next.js Build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8080
+        run: make check-frontend

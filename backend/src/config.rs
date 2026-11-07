@@ -19,8 +19,9 @@ impl AppConfig {
         let _ = dotenvy::dotenv();
         let _ = dotenvy::from_filename("../.env");
 
-        let database_url = env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://postgres:password@localhost:5432/stock_analyst".to_string());
+        let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgres://postgres:password@localhost:5432/stock_analyst".to_string()
+        });
         let backend_port = env::var("BACKEND_PORT")
             .or_else(|_| env::var("PORT"))
             .ok()
@@ -51,10 +52,10 @@ impl AppConfig {
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| "gemini-3.5-flash-lite".to_string());
 
-        let line_channel_access_token = env::var("LINE_CHANNEL_ACCESS_TOKEN")
-            .unwrap_or_else(|_| "mock_line_token".to_string());
-        let line_user_id = env::var("LINE_USER_ID")
-            .unwrap_or_else(|_| "mock_line_user_id".to_string());
+        let line_channel_access_token =
+            env::var("LINE_CHANNEL_ACCESS_TOKEN").unwrap_or_else(|_| "mock_line_token".to_string());
+        let line_user_id =
+            env::var("LINE_USER_ID").unwrap_or_else(|_| "mock_line_user_id".to_string());
 
         Self {
             database_url,
@@ -96,7 +97,9 @@ fn sanitize_url(raw: &str) -> String {
     // Handle markdown format like [https://api.openai.com/v1](https://api.openai.com/v1) if present
     if let Some(start) = trimmed.find("](") {
         if let Some(end) = trimmed[start + 2..].find(')') {
-            return trimmed[start + 2..start + 2 + end].trim_end_matches('/').to_string();
+            return trimmed[start + 2..start + 2 + end]
+                .trim_end_matches('/')
+                .to_string();
         }
     }
     trimmed.trim_end_matches('/').to_string()

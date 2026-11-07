@@ -9,8 +9,8 @@ pub mod services;
 use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
-    Router,
     routing::{delete, get, post},
+    Router,
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;

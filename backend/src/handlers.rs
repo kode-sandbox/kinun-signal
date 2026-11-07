@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use axum::{
-    Json,
     body::Bytes,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
+    Json,
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -335,10 +335,9 @@ pub async fn recalculate_stock(
     if let Some(new_discount_rate) = req.custom_target_discount_rate {
         if new_discount_rate.is_finite() {
             let clamped = new_discount_rate.clamp(-50.0, 80.0);
-            if let Some(updated) =
-                db::update_watchlist_discount_rate(&state.pool, &symbol, clamped)
-                    .await
-                    .map_err(internal_err)?
+            if let Some(updated) = db::update_watchlist_discount_rate(&state.pool, &symbol, clamped)
+                .await
+                .map_err(internal_err)?
             {
                 watchlist = updated;
             }
@@ -378,13 +377,11 @@ pub async fn recalculate_stock(
         let growth_rate_bull = req
             .custom_growth_rate_bull
             .unwrap_or_else(|| (base_ref.growth_rate_bull + delta).max(growth_rate_base + 0.02));
-        let growth_rate_bear = req
-            .custom_growth_rate_bear
-            .unwrap_or_else(|| {
-                (base_ref.growth_rate_bear + delta)
-                    .min(growth_rate_base - 0.02)
-                    .max(0.0)
-            });
+        let growth_rate_bear = req.custom_growth_rate_bear.unwrap_or_else(|| {
+            (base_ref.growth_rate_bear + delta)
+                .min(growth_rate_base - 0.02)
+                .max(0.0)
+        });
         let terminal_growth_rate = req
             .custom_terminal_growth_rate
             .unwrap_or(base_ref.terminal_growth_rate);
@@ -490,9 +487,7 @@ pub async fn get_system_info(
     }))
 }
 
-pub async fn get_alerts(
-    State(state): State<Arc<AppState>>,
-) -> ApiResult<Json<Vec<AlertLogRow>>> {
+pub async fn get_alerts(State(state): State<Arc<AppState>>) -> ApiResult<Json<Vec<AlertLogRow>>> {
     let alerts = db::get_recent_alerts(&state.pool, 30)
         .await
         .map_err(internal_err)?;

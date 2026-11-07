@@ -37,7 +37,7 @@ jobs:
       issues: write # for the failure notification issue below
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run Trivy vulnerability scanner in repo mode
         id: scan-fs

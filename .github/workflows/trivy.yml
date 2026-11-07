@@ -57,7 +57,7 @@ jobs:
       # image (OS package) vulnerabilities are caught here as well.
       # Cache is shared with the deploy workflows (type=gha).
       - name: Build backend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -81,7 +81,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Build frontend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           file: ./frontend/Dockerfile

@@ -262,7 +262,11 @@ WACCと永久成長率は、提供されたCAPM自走算出値（auto_wacc, auto
 
     /// Yahoo Finance の実財務データから WACC・永久成長率・FCF成長率を自走算出する
     pub fn fallback_dcf_params(financials: &StockFinancials) -> LlmDcfParams {
-        let latest_revenue = financials.revenue_history.first().copied().filter(|&r| r > 0.0);
+        let latest_revenue = financials
+            .revenue_history
+            .first()
+            .copied()
+            .filter(|&r| r > 0.0);
         let fcf_cagr = compute_series_cagr(&financials.fcf_history);
         let rev_cagr = compute_series_cagr(&financials.revenue_history);
 
@@ -323,10 +327,8 @@ WACCと永久成長率は、提供されたCAPM自走算出値（auto_wacc, auto
 
         let growth_rate_base = dcf::round_three_decimals(raw_base_g);
         let spread = (growth_rate_base * 0.35).clamp(0.04, 0.09);
-        let growth_rate_bull =
-            dcf::round_three_decimals((growth_rate_base + spread).min(0.45));
-        let growth_rate_bear =
-            dcf::round_three_decimals((growth_rate_base - spread).max(0.01));
+        let growth_rate_bull = dcf::round_three_decimals((growth_rate_base + spread).min(0.45));
+        let growth_rate_bear = dcf::round_three_decimals((growth_rate_base - spread).max(0.01));
 
         let net_cash_b =
             (financials.cash_and_short_term_investments - financials.total_debt) / 1_000_000_000.0;
@@ -514,11 +516,7 @@ mod tests {
                 108_807_000_000.0,
                 99_584_000_000.0,
             ],
-            revenue_history: vec![
-                466_823_000_000.0,
-                416_161_000_000.0,
-                391_035_000_000.0,
-            ],
+            revenue_history: vec![466_823_000_000.0, 416_161_000_000.0, 391_035_000_000.0],
             shares_outstanding: 14_714_676_000.0,
             latest_earnings_date: None,
             eps_actual: Some(2.02),

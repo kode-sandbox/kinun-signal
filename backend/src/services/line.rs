@@ -66,7 +66,10 @@ impl LineClient {
                 .await
             {
                 Ok(resp) if resp.status().is_success() => {
-                    info!("LINE notification sent successfully for {} ({})", ticker, alert_type);
+                    info!(
+                        "LINE notification sent successfully for {} ({})",
+                        ticker, alert_type
+                    );
                 }
                 Ok(resp) => {
                     let status = resp.status();

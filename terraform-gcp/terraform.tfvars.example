@@ -16,6 +16,8 @@ fmp_api_key               = "mock_fmp_key"
 llm_api_base_url          = "https://api.openai.com/v1"
 llm_api_key               = "mock_llm_key"
 llm_model                 = "argon"
+line_channel_id           = "mock_channel_id"
+line_channel_secret       = "mock_channel_secret"
 line_channel_access_token = "mock_line_token"
 line_user_id              = "mock_line_user_id"
 

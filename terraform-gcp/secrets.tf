@@ -3,6 +3,8 @@ locals {
     database_url              = var.database_url
     fmp_api_key               = var.fmp_api_key
     llm_api_key               = var.llm_api_key
+    line_channel_id           = var.line_channel_id
+    line_channel_secret       = var.line_channel_secret
     line_channel_access_token = var.line_channel_access_token
     line_user_id              = var.line_user_id
     basic_auth_user           = var.basic_auth_user

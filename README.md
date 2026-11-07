@@ -75,8 +75,8 @@ If any of the `*_KEY` variables are empty, equal to `your_…` or the mock place
 - `GET /api/stocks/:ticker` – Detailed view.
 - `POST /api/stocks/:ticker/recalculate` – Manual DCF re‑calc (optional overrides).
 - **Batch jobs**:
-  - `POST /api/jobs/daily-check` – Daily price/alert + news summary.
-  - `POST /api/jobs/earnings-check` – Quarterly earnings check & re‑calc.
+  - `POST /api/jobs/daily-check` – Daily price/alert + news summary. Its LINE push is combined into **one digest message per run** (undervalued alerts first, then news summaries; long digests are split into multiple text objects within the same push). The individual alerts are still recorded per ticker in `alert_logs`.
+  - `POST /api/jobs/earnings-check` – Quarterly earnings check & re‑calc (LINE notifications stay per ticker).
 - `GET /api/alerts` – Latest 30 LINE‑style alerts.
 
 Batch jobs are also automatically scheduled at **UTC 21:30 Tue‑Sat** (Japan 06:30) via `tokio‑cron‑scheduler`.

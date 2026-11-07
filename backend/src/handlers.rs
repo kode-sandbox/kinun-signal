@@ -7,7 +7,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use serde::Deserialize;
 use serde_json::json;
 use sqlx::PgPool;
@@ -494,6 +494,35 @@ pub async fn get_alerts(State(state): State<Arc<AppState>>) -> ApiResult<Json<Ve
     Ok(Json(alerts))
 }
 
+/// Build the single LINE digest for one daily-check run: undervalued
+/// alerts first, then the per-ticker news summaries. The per-ticker
+/// alerts are still recorded individually in alert_logs, so the app
+/// history is unchanged; only the LINE push is combined into one
+/// message to stay within LINE's monthly message quota.
+fn build_daily_digest(
+    today: NaiveDate,
+    processed_count: usize,
+    undervalued_msgs: &[String],
+    news_msgs: &[String],
+) -> String {
+    let mut digest = format!(
+        "📬【日次ダイジェスト】{}（{}銘柄チェック）\n割安アラート: {}件 / ニュース要約: {}件",
+        today,
+        processed_count,
+        undervalued_msgs.len(),
+        news_msgs.len()
+    );
+    if !undervalued_msgs.is_empty() {
+        digest.push_str("\n\n━━ 🚨 割安アラート ━━\n");
+        digest.push_str(&undervalued_msgs.join("\n"));
+    }
+    if !news_msgs.is_empty() {
+        digest.push_str("\n\n━━ 📰 ニュース要約 ━━\n");
+        digest.push_str(&news_msgs.join("\n\n"));
+    }
+    digest
+}
+
 pub async fn execute_daily_check(state: &AppState) -> anyhow::Result<JobSummaryResponse> {
     let watchlists = db::get_all_watchlists(&state.pool).await?;
     let today = Utc::now().date_naive();
@@ -515,13 +544,23 @@ pub async fn execute_daily_check(state: &AppState) -> anyhow::Result<JobSummaryR
             let _permit = sem.acquire().await.ok();
             let mut alerts_triggered = 0usize;
             let mut messages = Vec::new();
+            let mut sections: Vec<(&'static str, String)> = Vec::new();
 
             let fin = fmp.fetch_financials(&w.ticker).await;
             let Some(tp) = db::get_latest_theoretical_price(&pool, &w.ticker).await? else {
-                return Ok::<(usize, usize, Vec<String>), anyhow::Error>((
+                return Ok::<
+                    (
+                        usize,
+                        usize,
+                        Vec<String>,
+                        Vec<(&'static str, String)>,
+                    ),
+                    anyhow::Error,
+                >((
                     idx,
                     alerts_triggered,
                     messages,
+                    sections,
                 ));
             };
 
@@ -537,10 +576,13 @@ pub async fn execute_daily_check(state: &AppState) -> anyhow::Result<JobSummaryR
                     fin.current_price,
                     w.target_discount_rate
                 );
-                line.send_and_log(&pool, &w.ticker, "UNDERVALUED", &alert_msg)
+                // Recorded per ticker in alert_logs; the LINE push itself
+                // is combined into the digest after all tickers finish.
+                line.log_only(&pool, &w.ticker, "UNDERVALUED", &alert_msg)
                     .await?;
                 alerts_triggered += 1;
-                messages.push(alert_msg);
+                messages.push(alert_msg.clone());
+                sections.push(("UNDERVALUED", alert_msg));
             }
 
             let news = fmp.fetch_news(&w.ticker).await;
@@ -552,12 +594,13 @@ pub async fn execute_daily_check(state: &AppState) -> anyhow::Result<JobSummaryR
                 "📰【モーニングニュース要約】{} ({})\n現在株価: ${:.2} / 理論株価(Base): ${:.2} ({:+.2}%)\n\n{}",
                 w.company_name, w.ticker, fin.current_price, tp.base_price, div_rate, summary_ja
             );
-            line.send_and_log(&pool, &w.ticker, "NEWS_SUMMARY", &news_msg)
+            line.log_only(&pool, &w.ticker, "NEWS_SUMMARY", &news_msg)
                 .await?;
             alerts_triggered += 1;
-            messages.push(news_msg);
+            messages.push(news_msg.clone());
+            sections.push(("NEWS_SUMMARY", news_msg));
 
-            Ok((idx, alerts_triggered, messages))
+            Ok((idx, alerts_triggered, messages, sections))
         });
     }
 
@@ -565,13 +608,28 @@ pub async fn execute_daily_check(state: &AppState) -> anyhow::Result<JobSummaryR
     while let Some(res) = join_set.join_next().await {
         ordered_results.push(res??);
     }
-    ordered_results.sort_by_key(|(idx, _, _)| *idx);
+    ordered_results.sort_by_key(|(idx, _, _, _)| *idx);
 
     let mut alerts_triggered = 0usize;
     let mut messages = Vec::new();
-    for (_, count, msgs) in ordered_results {
+    let mut undervalued_msgs = Vec::new();
+    let mut news_msgs = Vec::new();
+    for (_, count, msgs, sections) in ordered_results {
         alerts_triggered += count;
         messages.extend(msgs);
+        for (kind, msg) in sections {
+            if kind == "UNDERVALUED" {
+                undervalued_msgs.push(msg);
+            } else {
+                news_msgs.push(msg);
+            }
+        }
+    }
+
+    // One LINE push per run instead of one per ticker per alert type.
+    if !messages.is_empty() {
+        let digest = build_daily_digest(today, watchlists.len(), &undervalued_msgs, &news_msgs);
+        state.line.push_digest(&digest).await;
     }
 
     Ok(JobSummaryResponse {
@@ -716,4 +774,38 @@ pub async fn execute_earnings_check(
         messages,
         executed_at: Utc::now(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_daily_digest;
+    use chrono::NaiveDate;
+
+    fn today() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 11, 8).unwrap()
+    }
+
+    #[test]
+    fn digest_lists_undervalued_before_news_with_counts() {
+        let digest = build_daily_digest(
+            today(),
+            3,
+            &["UVMSG-AAA".to_string()],
+            &["NEWSMSG-BBB".to_string()],
+        );
+        assert!(digest.starts_with("📬"));
+        assert!(digest.contains("2026-11-08"));
+        assert!(digest.contains("割安アラート: 1件 / ニュース要約: 1件"));
+        let uv = digest.find("UVMSG-AAA").unwrap();
+        let news = digest.find("NEWSMSG-BBB").unwrap();
+        assert!(uv < news);
+    }
+
+    #[test]
+    fn digest_without_undervalued_omits_that_section() {
+        let digest = build_daily_digest(today(), 2, &[], &["NEWSMSG-BBB".to_string()]);
+        assert!(digest.contains("割安アラート: 0件 / ニュース要約: 1件"));
+        assert!(!digest.contains("━━ 🚨 割安アラート ━━"));
+        assert!(digest.contains("━━ 📰 ニュース要約 ━━"));
+    }
 }

@@ -1,6 +1,8 @@
 use reqwest::Client;
 use serde::Serialize;
 use sqlx::PgPool;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use crate::config::AppConfig;
@@ -9,8 +11,8 @@ use crate::db;
 /// LINE text messages are limited to 5,000 characters per message object.
 /// Keep some headroom and split long digests at line boundaries.
 const MAX_TEXT_CHARS_PER_MESSAGE: usize = 4_500;
-/// The LINE push API accepts at most 5 message objects per request. The
-/// message count billed by LINE is per recipient per request, not per
+/// The LINE push / broadcast API accepts at most 5 message objects per request.
+/// The message count billed by LINE is per recipient per request, not per
 /// message object, so packing a digest into one request stays one message.
 const MAX_MESSAGES_PER_PUSH: usize = 5;
 
@@ -18,11 +20,17 @@ const MAX_MESSAGES_PER_PUSH: usize = 5;
 pub struct LineClient {
     http: Client,
     config: AppConfig,
+    oauth_token_cache: Arc<RwLock<Option<String>>>,
 }
 
 #[derive(Debug, Serialize)]
 struct LinePushRequest<'a> {
     to: &'a str,
+    messages: Vec<LineTextMessage<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct LineBroadcastRequest<'a> {
     messages: Vec<LineTextMessage<'a>>,
 }
 
@@ -90,37 +98,113 @@ impl LineClient {
                 .build()
                 .unwrap_or_default(),
             config,
+            oauth_token_cache: Arc::new(RwLock::new(None)),
         }
     }
 
-    /// Send already-chunked texts to LINE, batched into push requests of
-    /// at most MAX_MESSAGES_PER_PUSH message objects. Real-API failures are
-    /// reported as Err with the status/body or transport error described.
-    async fn push_real(&self, texts: &[String]) -> Result<(), String> {
-        for batch in texts.chunks(MAX_MESSAGES_PER_PUSH) {
-            let payload = LinePushRequest {
-                to: &self.config.line_user_id,
-                messages: batch
-                    .iter()
-                    .map(|text| LineTextMessage {
-                        msg_type: "text",
-                        text,
-                    })
-                    .collect(),
-            };
+    /// Resolve a valid channel access token. Uses `line_channel_access_token`
+    /// if present, otherwise requests a short-lived token using OAuth
+    /// client_credentials with `line_channel_id` and `line_channel_secret`.
+    async fn get_access_token(&self) -> Result<String, String> {
+        if !crate::config::is_mock_or_empty(&self.config.line_channel_access_token) {
+            return Ok(self.config.line_channel_access_token.clone());
+        }
 
+        // Check cached token
+        {
+            let cache = self.oauth_token_cache.read().await;
+            if let Some(token) = cache.as_ref() {
+                return Ok(token.clone());
+            }
+        }
+
+        if !crate::config::is_mock_or_empty(&self.config.line_channel_id)
+            && !crate::config::is_mock_or_empty(&self.config.line_channel_secret)
+        {
+            let params = [
+                ("grant_type", "client_credentials"),
+                ("client_id", self.config.line_channel_id.trim()),
+                ("client_secret", self.config.line_channel_secret.trim()),
+            ];
             let resp = self
                 .http
-                .post("https://api.line.me/v2/bot/message/push")
-                .bearer_auth(&self.config.line_channel_access_token)
-                .json(&payload)
+                .post("https://api.line.me/v2/oauth/accessToken")
+                .form(&params)
                 .send()
                 .await
-                .map_err(|err| err.to_string())?;
+                .map_err(|e| format!("OAuth request error: {e}"))?;
 
             if !resp.status().is_success() {
                 let status = resp.status();
                 let body = resp.text().await.unwrap_or_default();
+                return Err(format!("OAuth failed with {status}: {body}"));
+            }
+
+            #[derive(serde::Deserialize)]
+            struct TokenResponse {
+                access_token: String,
+            }
+
+            let token_resp: TokenResponse = resp
+                .json()
+                .await
+                .map_err(|e| format!("Failed to parse token response: {e}"))?;
+
+            let mut cache = self.oauth_token_cache.write().await;
+            *cache = Some(token_resp.access_token.clone());
+            return Ok(token_resp.access_token);
+        }
+
+        Err("No valid LINE access token or OAuth credentials configured".to_string())
+    }
+
+    /// Send already-chunked texts to LINE, batched into push/broadcast requests of
+    /// at most MAX_MESSAGES_PER_PUSH message objects. If `is_line_broadcast()` is true,
+    /// sends via broadcast API to all friends (convenient for single-user self-bot).
+    /// Real-API failures are reported as Err with the status/body or transport error described.
+    async fn push_real(&self, texts: &[String]) -> Result<(), String> {
+        let token = self.get_access_token().await?;
+        let is_broadcast = self.config.is_line_broadcast();
+
+        for batch in texts.chunks(MAX_MESSAGES_PER_PUSH) {
+            let messages: Vec<LineTextMessage<'_>> = batch
+                .iter()
+                .map(|text| LineTextMessage {
+                    msg_type: "text",
+                    text,
+                })
+                .collect();
+
+            let resp = if is_broadcast {
+                let payload = LineBroadcastRequest { messages };
+                self.http
+                    .post("https://api.line.me/v2/bot/message/broadcast")
+                    .bearer_auth(&token)
+                    .json(&payload)
+                    .send()
+                    .await
+                    .map_err(|err| err.to_string())?
+            } else {
+                let payload = LinePushRequest {
+                    to: &self.config.line_user_id,
+                    messages,
+                };
+                self.http
+                    .post("https://api.line.me/v2/bot/message/push")
+                    .bearer_auth(&token)
+                    .json(&payload)
+                    .send()
+                    .await
+                    .map_err(|err| err.to_string())?
+            };
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                if status == reqwest::StatusCode::UNAUTHORIZED {
+                    let mut cache = self.oauth_token_cache.write().await;
+                    *cache = None;
+                }
                 return Err(format!("{status} ({body})"));
             }
         }
@@ -255,5 +339,41 @@ mod tests {
         let chunks = chunk_text(&text, 4_500);
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks.concat(), text);
+    }
+
+    #[test]
+    fn test_broadcast_and_mock_detection() {
+        let mut config = crate::config::AppConfig {
+            database_url: "postgres://localhost/test".to_string(),
+            backend_port: 8080,
+            enable_internal_scheduler: false,
+            fmp_api_key: "mock_fmp_key".to_string(),
+            llm_api_base_url: "http://localhost".to_string(),
+            llm_api_key: "mock_llm_key".to_string(),
+            llm_model: "argon".to_string(),
+            llm_news_model: "flash".to_string(),
+            line_channel_id: "mock_channel_id".to_string(),
+            line_channel_secret: "mock_channel_secret".to_string(),
+            line_channel_access_token: "mock_line_token".to_string(),
+            line_user_id: "mock_line_user_id".to_string(),
+        };
+
+        // All mock
+        assert!(config.is_line_mock());
+        assert!(config.is_line_broadcast());
+
+        // With Channel ID & Secret -> not mock!
+        config.line_channel_id = "test_custom_channel_id".to_string();
+        config.line_channel_secret = "test_custom_channel_secret".to_string();
+        assert!(!config.is_line_mock());
+        assert!(config.is_line_broadcast()); // Still broadcast because user_id is mock
+
+        // With explicit user_id -> not broadcast
+        config.line_user_id = "U1234567890abcdef1234567890abcdef".to_string();
+        assert!(!config.is_line_broadcast());
+
+        // With broadcast keyword -> broadcast
+        config.line_user_id = "broadcast".to_string();
+        assert!(config.is_line_broadcast());
     }
 }

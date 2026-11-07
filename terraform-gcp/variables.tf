@@ -83,6 +83,20 @@ variable "llm_model" {
   description = "LLM model identifier"
 }
 
+variable "line_channel_id" {
+  type        = string
+  sensitive   = true
+  default     = "mock_channel_id"
+  description = "LINE Messaging API Channel ID"
+}
+
+variable "line_channel_secret" {
+  type        = string
+  sensitive   = true
+  default     = "mock_channel_secret"
+  description = "LINE Messaging API Channel Secret"
+}
+
 variable "line_channel_access_token" {
   type        = string
   sensitive   = true

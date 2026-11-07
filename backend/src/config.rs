@@ -10,6 +10,8 @@ pub struct AppConfig {
     pub llm_api_key: String,
     pub llm_model: String,
     pub llm_news_model: String,
+    pub line_channel_id: String,
+    pub line_channel_secret: String,
     pub line_channel_access_token: String,
     pub line_user_id: String,
 }
@@ -52,6 +54,10 @@ impl AppConfig {
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| "gemini-3.5-flash-lite".to_string());
 
+        let line_channel_id =
+            env::var("LINE_CHANNEL_ID").unwrap_or_else(|_| "mock_channel_id".to_string());
+        let line_channel_secret =
+            env::var("LINE_CHANNEL_SECRET").unwrap_or_else(|_| "mock_channel_secret".to_string());
         let line_channel_access_token =
             env::var("LINE_CHANNEL_ACCESS_TOKEN").unwrap_or_else(|_| "mock_line_token".to_string());
         let line_user_id =
@@ -66,6 +72,8 @@ impl AppConfig {
             llm_api_key,
             llm_model,
             llm_news_model,
+            line_channel_id,
+            line_channel_secret,
             line_channel_access_token,
             line_user_id,
         }
@@ -80,11 +88,19 @@ impl AppConfig {
     }
 
     pub fn is_line_mock(&self) -> bool {
-        is_mock_or_empty(&self.line_channel_access_token) || is_mock_or_empty(&self.line_user_id)
+        let has_token = !is_mock_or_empty(&self.line_channel_access_token);
+        let has_oauth = !is_mock_or_empty(&self.line_channel_id)
+            && !is_mock_or_empty(&self.line_channel_secret);
+        !has_token && !has_oauth
+    }
+
+    pub fn is_line_broadcast(&self) -> bool {
+        is_mock_or_empty(&self.line_user_id)
+            || self.line_user_id.trim().eq_ignore_ascii_case("broadcast")
     }
 }
 
-fn is_mock_or_empty(val: &str) -> bool {
+pub fn is_mock_or_empty(val: &str) -> bool {
     let trimmed = val.trim();
     trimmed.is_empty()
         || trimmed.starts_with("mock_")

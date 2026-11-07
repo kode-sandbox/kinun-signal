@@ -23,5 +23,7 @@ RUN touch src/main.rs && \
 FROM --platform=linux/amd64 debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/stock_analyst_backend /usr/local/bin/
+RUN useradd --uid 10001 --user-group --no-create-home appuser
+USER appuser
 EXPOSE 8080
 CMD ["stock_analyst_backend"]

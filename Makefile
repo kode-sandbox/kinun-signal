@@ -4,7 +4,7 @@
 # Usage:
 #   make check          Run all static & build harnesses (no-todo, backend, frontend)
 #   make check-no-todo  Ensure no omitted code (TODO / FIXME / unimplemented! / todo!)
-#   make check-backend  Run cargo fmt, cargo clippy (-D warnings), and cargo test
+#   make check-backend  Run cargo fmt, cargo clippy (-D warnings), cargo test, and cargo build
 #   make check-frontend Run Next.js typecheck and production build
 #   make smoke          Run end-to-end API smoke test against running backend
 # ==============================================================================
@@ -23,10 +23,11 @@ check-no-todo:
 	@echo "✅ No forbidden placeholders found."
 
 check-backend:
-	@echo "🦀 [2/3] Running Rust formatting, Clippy lints, and unit tests..."
+	@echo "🦀 [2/3] Running Rust formatting, Clippy lints, unit tests, and build..."
 	cd backend && cargo fmt --all -- --check
 	cd backend && cargo clippy --all-targets -- -D warnings
 	cd backend && cargo test
+	cd backend && cargo build
 
 check-frontend:
 	@echo "⚛️  [3/3] Running Next.js TypeScript check and production build..."

@@ -1,0 +1,33 @@
+name: Semgrep (SAST)
+
+# Static analysis (SAST) guardrail. Dependency vulnerabilities are covered
+# separately by trivy.yml; this workflow scans our own code.
+# Runs only when backend/ or frontend/ change (plus manual dispatch),
+# and fails the job when Semgrep reports a finding.
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/semgrep.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep-scan:
+    name: Code Scan (Semgrep)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.184.0
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        # Registry ruleset only; no Semgrep Cloud token required.
+        # --error makes the job fail when a rule matches.
+        run: semgrep scan --config p/default --error --metrics=off

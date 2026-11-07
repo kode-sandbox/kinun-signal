@@ -363,8 +363,8 @@ mod tests {
         assert!(config.is_line_broadcast());
 
         // With Channel ID & Secret -> not mock!
-        config.line_channel_id = "2012459981".to_string();
-        config.line_channel_secret = "079cdc99c2872fb030d4bf8a9a197e07".to_string();
+        config.line_channel_id = "test_custom_channel_id".to_string();
+        config.line_channel_secret = "test_custom_channel_secret".to_string();
         assert!(!config.is_line_mock());
         assert!(config.is_line_broadcast()); // Still broadcast because user_id is mock
 

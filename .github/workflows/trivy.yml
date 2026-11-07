@@ -51,7 +51,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # Build the same images that get deployed, and scan them so base
       # image (OS package) vulnerabilities are caught here as well.

@@ -519,7 +519,11 @@ export default function DashboardPage() {
               </div>
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e) =>
+                  setSortBy(
+                    e.target.value as "registered" | "cheapest" | "name"
+                  )
+                }
                 className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:shadow-none dark:focus:border-emerald-500/50"
               >
                 <option value="registered">登録順</option>

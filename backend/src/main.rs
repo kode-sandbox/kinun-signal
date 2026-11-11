@@ -1,7 +1,9 @@
 pub mod config;
 pub mod db;
 pub mod dcf;
+pub mod db_jp;
 pub mod handlers;
+pub mod jp_handlers;
 pub mod models;
 pub mod scheduler;
 pub mod services;
@@ -19,7 +21,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use crate::{
     config::AppConfig,
     handlers::AppState,
-    services::{fmp::FmpClient, line::LineClient, llm::LlmClient},
+    services::{
+        edinet::EdinetClient, fmp::FmpClient, jquants::JQuantsClient, line::LineClient,
+        llm::LlmClient,
+    },
 };
 
 #[tokio::main]
@@ -49,6 +54,8 @@ async fn main() -> anyhow::Result<()> {
     let fmp = FmpClient::new(cfg.clone());
     let llm = LlmClient::new(cfg.clone());
     let line = LineClient::new(cfg.clone());
+    let jquants = JQuantsClient::new(cfg.clone());
+    let edinet = EdinetClient::new(cfg.clone());
 
     db::seed_initial_data_if_empty(&pool, &fmp, &llm, &line).await?;
 
@@ -58,6 +65,8 @@ async fn main() -> anyhow::Result<()> {
         fmp,
         llm,
         line,
+        jquants,
+        edinet,
     });
 
     let _scheduler = if cfg.enable_internal_scheduler {
@@ -90,6 +99,18 @@ async fn main() -> anyhow::Result<()> {
             post(handlers::run_earnings_check_handler),
         )
         .route("/api/alerts", get(handlers::get_alerts))
+        .route(
+            "/api/jp/watchlist",
+            get(jp_handlers::get_jp_watchlist).post(jp_handlers::add_jp_watchlist),
+        )
+        .route(
+            "/api/jp/watchlist/{code}",
+            get(jp_handlers::get_jp_stock_detail).delete(jp_handlers::delete_jp_watchlist),
+        )
+        .route(
+            "/api/jp/jobs/daily-check",
+            post(jp_handlers::run_jp_daily_check_handler),
+        )
         .route("/api/system/info", get(handlers::get_system_info))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

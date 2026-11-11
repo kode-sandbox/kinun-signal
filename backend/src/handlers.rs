@@ -22,7 +22,9 @@ use crate::{
         StockDetailResponse, UpdateWatchlistRequest, WatchlistItemResponse,
     },
     services::{
+        edinet::EdinetClient,
         fmp::FmpClient,
+        jquants::JQuantsClient,
         line::LineClient,
         llm::{LlmClient, LlmDcfParams},
     },
@@ -35,6 +37,8 @@ pub struct AppState {
     pub fmp: FmpClient,
     pub llm: LlmClient,
     pub line: LineClient,
+    pub jquants: JQuantsClient,
+    pub edinet: EdinetClient,
 }
 
 #[derive(Debug, Deserialize, Default)]

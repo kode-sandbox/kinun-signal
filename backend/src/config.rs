@@ -14,6 +14,8 @@ pub struct AppConfig {
     pub line_channel_secret: String,
     pub line_channel_access_token: String,
     pub line_user_id: String,
+    pub jquants_api_key: String,
+    pub edinet_api_key: String,
 }
 
 impl AppConfig {
@@ -63,6 +65,11 @@ impl AppConfig {
         let line_user_id =
             env::var("LINE_USER_ID").unwrap_or_else(|_| "mock_line_user_id".to_string());
 
+        let jquants_api_key = env::var("JQUANTS_API_KEY")
+            .unwrap_or_else(|_| "mock_jquants_api_key".to_string());
+        let edinet_api_key = env::var("EDINET_API_KEY")
+            .unwrap_or_else(|_| "mock_edinet_api_key".to_string());
+
         Self {
             database_url,
             backend_port,
@@ -76,7 +83,17 @@ impl AppConfig {
             line_channel_secret,
             line_channel_access_token,
             line_user_id,
+            jquants_api_key,
+            edinet_api_key,
         }
+    }
+
+    pub fn is_jquants_mock(&self) -> bool {
+        is_mock_or_empty(&self.jquants_api_key)
+    }
+
+    pub fn is_edinet_mock(&self) -> bool {
+        is_mock_or_empty(&self.edinet_api_key)
     }
 
     pub fn is_fmp_mock(&self) -> bool {

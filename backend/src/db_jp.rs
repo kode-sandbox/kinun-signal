@@ -267,6 +267,22 @@ pub async fn get_jp_alerts_by_code(
     Ok(rows)
 }
 
+pub async fn get_recent_jp_alerts(
+    pool: &PgPool,
+    limit: i64,
+) -> anyhow::Result<Vec<JpAlertLogRow>> {
+    let rows = sqlx::query_as::<_, JpAlertLogRow>(
+        r#"
+        SELECT id, code, alert_type, message, sent_at FROM jp_alert_logs
+        ORDER BY sent_at DESC, id DESC LIMIT $1
+        "#,
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 pub fn build_jp_watchlist_item(
     w: &JpWatchlistRow,
     tp: &JpTheoreticalPriceRow,

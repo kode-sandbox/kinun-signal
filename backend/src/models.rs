@@ -130,3 +130,102 @@ pub struct JobSummaryResponse {
     pub messages: Vec<String>,
     pub executed_at: DateTime<Utc>,
 }
+
+// ---- Japanese-stock version models (jp_* tables) ----
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct JpWatchlistRow {
+    pub code: String,
+    pub company_name: String,
+    pub edinet_code: Option<String>,
+    pub target_discount_rate: f64,
+    pub last_earnings_date: Option<NaiveDate>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct JpTheoreticalPriceRow {
+    pub id: i32,
+    pub code: String,
+    pub trigger_type: String,
+    pub base_price: f64,
+    pub bull_price: f64,
+    pub bear_price: f64,
+    pub net_cash: f64,
+    pub free_cash_flow: f64,
+    pub shares_outstanding: f64,
+    pub wacc: f64,
+    pub growth_rate_base: f64,
+    pub growth_rate_bull: f64,
+    pub growth_rate_bear: f64,
+    pub terminal_growth_rate: f64,
+    pub reasoning_ja: String,
+    pub calculated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct JpDailyPriceRow {
+    pub id: i32,
+    pub code: String,
+    pub trade_date: NaiveDate,
+    pub open_price: f64,
+    pub high_price: f64,
+    pub low_price: f64,
+    pub close_price: f64,
+    pub volume: f64,
+    pub divergence_rate: f64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct JpAlertLogRow {
+    pub id: i32,
+    pub code: String,
+    pub alert_type: String,
+    pub message: String,
+    pub sent_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JpWatchlistItemResponse {
+    pub code: String,
+    pub company_name: String,
+    pub target_discount_rate: f64,
+    pub current_price: f64,
+    pub base_price: f64,
+    pub bull_price: f64,
+    pub bear_price: f64,
+    pub divergence_rate: f64,
+    pub is_undervalued_alert: bool,
+    pub wacc: f64,
+    pub growth_rate_base: f64,
+    pub growth_rate_bull: f64,
+    pub growth_rate_bear: f64,
+    pub terminal_growth_rate: f64,
+    pub net_cash: f64,
+    pub free_cash_flow: f64,
+    pub shares_outstanding: f64,
+    pub reasoning_ja: String,
+    pub last_earnings_date: Option<NaiveDate>,
+    pub calculated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddJpWatchlistRequest {
+    pub code: String,
+    #[serde(default = "default_discount_rate")]
+    pub target_discount_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JpStockDetailResponse {
+    pub watchlist: JpWatchlistRow,
+    pub current_price: f64,
+    pub divergence_rate: f64,
+    pub is_undervalued_alert: bool,
+    pub latest_theoretical: Option<JpTheoreticalPriceRow>,
+    pub theoretical_history: Vec<JpTheoreticalPriceRow>,
+    pub daily_prices: Vec<JpDailyPriceRow>,
+    pub recent_alerts: Vec<JpAlertLogRow>,
+}

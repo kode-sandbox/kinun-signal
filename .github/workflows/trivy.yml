@@ -16,6 +16,7 @@ on:
       - 'frontend/package-lock.json'
       - 'frontend/Dockerfile'
       - '.github/workflows/trivy.yml'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main ]
     paths:
@@ -26,6 +27,7 @@ on:
       - 'frontend/package-lock.json'
       - 'frontend/Dockerfile'
       - '.github/workflows/trivy.yml'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:

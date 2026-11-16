@@ -356,6 +356,8 @@ mod tests {
             line_channel_secret: "mock_channel_secret".to_string(),
             line_channel_access_token: "mock_line_token".to_string(),
             line_user_id: "mock_line_user_id".to_string(),
+            jquants_api_key: "mock_jquants_api_key".to_string(),
+            edinet_api_key: "mock_edinet_api_key".to_string(),
         };
 
         // All mock

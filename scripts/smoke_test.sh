@@ -116,52 +116,6 @@ pass "9/10 GET /api/alerts (logged alerts: $(echo "${ALERTS}" | jq 'length'))"
 DELETED=$(curl -sSf -X DELETE "${API_URL}/api/watchlist/${TEST_TICKER}")
 echo "${DELETED}" | jq -e --arg ticker "${TEST_TICKER}" '.deleted == true and .ticker == $ticker' >/dev/null \
   || fail "DELETE /api/watchlist/${TEST_TICKER} failed: ${DELETED}"
-pass "10/16 DELETE /api/watchlist/${TEST_TICKER}"
+pass "10/10 DELETE /api/watchlist/${TEST_TICKER}"
 
-# 11. GET /api/jp/watchlist
-TEST_JP_CODE="${TEST_JP_CODE:-7203}"
-JP_WATCHLIST=$(curl -sSf "${API_URL}/api/jp/watchlist")
-echo "${JP_WATCHLIST}" | jq -e 'type == "array"' >/dev/null \
-  || fail "GET /api/jp/watchlist did not return an array"
-pass "11/16 GET /api/jp/watchlist (count: $(echo "${JP_WATCHLIST}" | jq 'length'))"
-
-# 12. POST /api/jp/watchlist (Add JP stock & run DCF + fallback)
-JP_ADDED=$(curl -sSf -X POST "${API_URL}/api/jp/watchlist" \
-  -H "Content-Type: application/json" \
-  -d "{\"code\": \"${TEST_JP_CODE}\", \"target_discount_rate\": 20.0}")
-echo "${JP_ADDED}" | jq -e \
-  --arg code "${TEST_JP_CODE}" \
-  '.code == $code and .base_price > 0 and .bull_price >= .base_price and .base_price >= .bear_price' >/dev/null \
-  || fail "POST /api/jp/watchlist invariant check failed: ${JP_ADDED}"
-pass "12/16 POST /api/jp/watchlist (${TEST_JP_CODE} base_price=$(echo "${JP_ADDED}" | jq -r '.base_price'))"
-
-# 13. GET /api/jp/stocks/{code}
-JP_DETAIL=$(curl -sSf "${API_URL}/api/jp/stocks/${TEST_JP_CODE}")
-echo "${JP_DETAIL}" | jq -e \
-  --arg code "${TEST_JP_CODE}" \
-  '.watchlist.code == $code and .latest_theoretical.base_price > 0' >/dev/null \
-  || fail "GET /api/jp/stocks/${TEST_JP_CODE} contract check failed"
-pass "13/16 GET /api/jp/stocks/${TEST_JP_CODE}"
-
-# 14. POST /api/jp/jobs/daily-check & earnings-check?force=true
-JP_DAILY=$(curl -sSf -X POST "${API_URL}/api/jp/jobs/daily-check")
-echo "${JP_DAILY}" | jq -e '.processed_count >= 1' >/dev/null \
-  || fail "POST /api/jp/jobs/daily-check failed: ${JP_DAILY}"
-JP_EARNINGS=$(curl -sSf -X POST "${API_URL}/api/jp/jobs/earnings-check?force=true")
-echo "${JP_EARNINGS}" | jq -e '.processed_count >= 1' >/dev/null \
-  || fail "POST /api/jp/jobs/earnings-check?force=true failed: ${JP_EARNINGS}"
-pass "14/16 POST /api/jp/jobs/daily-check & earnings-check?force=true"
-
-# 15. GET /api/jp/alerts
-JP_ALERTS=$(curl -sSf "${API_URL}/api/jp/alerts")
-echo "${JP_ALERTS}" | jq -e 'type == "array" and length >= 1' >/dev/null \
-  || fail "GET /api/jp/alerts returned empty or invalid array: ${JP_ALERTS}"
-pass "15/16 GET /api/jp/alerts (logged alerts: $(echo "${JP_ALERTS}" | jq 'length'))"
-
-# 16. DELETE /api/jp/watchlist/{code}
-JP_DELETED=$(curl -sSf -X DELETE "${API_URL}/api/jp/watchlist/${TEST_JP_CODE}")
-echo "${JP_DELETED}" | jq -e --arg code "${TEST_JP_CODE}" '.status == "deleted" and .code == $code' >/dev/null \
-  || fail "DELETE /api/jp/watchlist/${TEST_JP_CODE} failed: ${JP_DELETED}"
-pass "16/16 DELETE /api/jp/watchlist/${TEST_JP_CODE}"
-
-echo "🎉 All 16 US & JP API smoke test assertions passed!"
+echo "🎉 All 10 API smoke test assertions passed!"

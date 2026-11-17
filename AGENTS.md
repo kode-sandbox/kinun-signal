@@ -4,10 +4,11 @@
 本ドキュメントの仕様に100%従い、MacBook Air (Apple Silicon / localhost) 上で完全に動作する「米国株理論株価算出＆アラートシステム（Personal Stock Analyst）」をモノレポで実装してください。
 
 ## ⚠️ 絶対遵守ルール（Strict Constraints）
-1. **省略の完全禁止**: `// TODO`, `// implement here`, `unimplemented!()` などの省略は一切禁止する。すべての関数・UIコンポーネントを最後まで完全に実装すること。
-2. **コンパイル・ビルド保証**: バックエンドは `cargo test` および `cargo check` がエラーなく通ること。フロントエンドは `npm run build` が型エラーなく通ることを必ず確認してから作業を完了すること。
-3. **Graceful Fallback（モック自動切替）の実装**: `.env` の `FMP_API_KEY`, `LLM_API_KEY`, `LINE_CHANNEL_ACCESS_TOKEN` が未設定・空文字・または `"your_..."` のような初期値である場合、エラーでクラッシュさせず、**自動的にリアルなダミーデータ（AAPLやNVDAの実際の財務規模に近い数値）を返して全フロー（DB保存・画面表示）を完走させるフォールバック処理**を各サービスクライアントに必ず実装すること。
-4. **使用LLMモデル**: 環境変数 `LLM_MODEL`（デフォルト値: `argon`）を使用すること。
+1. **ハーネスエンジニアリング規約の遵守**: 作業開始前に必ず `docs/HARNESS_ENGINEERING.md` を確認すること。巨大ファイル（`fmp.rs`, `llm.rs` 等）を読む際は全文読込を行わず、まず `make agent-context-map` で関数シグネチャと行番号を確認し、行範囲指定（80行以内）で読み込むこと。また、ロックファイル（`Cargo.lock`, `package-lock.json`）や `*.tfstate*` の直接読込は禁止する。
+2. **省略の完全禁止**: `// TODO`, `// implement here`, `unimplemented!()` などの省略は一切禁止する。すべての関数・UIコンポーネントを最後まで完全に実装すること。
+3. **決定論的品質ゲート（`make check`）の通過保証**: 作業完了前に必ずルートで `make check`（TODO検査・Rust fmt/clippy/test・US/JP両フロントエンドの型検査とビルド）を実行し、すべてエラーなく通ることを確認してから完了報告すること。同一エラーで2回連続失敗した場合は自律リトライを止め、原因と試行内容を要約してエスカレーションすること（2-Strike Rule）。
+4. **Graceful Fallback（モック自動切替）の実装**: `.env` の `FMP_API_KEY`, `LLM_API_KEY`, `LINE_CHANNEL_ACCESS_TOKEN` が未設定・空文字・または `"your_..."` のような初期値である場合、エラーでクラッシュさせず、**自動的にリアルなダミーデータ（AAPLやNVDAの実際の財務規模に近い数値）を返して全フロー（DB保存・画面表示）を完走させるフォールバック処理**を各サービスクライアントに必ず実装すること。
+5. **使用LLMモデル**: 環境変数 `LLM_MODEL`（デフォルト値: `argon`）を使用すること。
 
 ---
 

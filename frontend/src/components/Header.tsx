@@ -1,17 +1,20 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Activity,
   BarChart3,
   Loader2,
+  Menu,
   Moon,
   Plus,
   RefreshCw,
   Sun,
 } from "lucide-react";
+import SideMenu, { Market } from "@/components/SideMenu";
 
 interface HeaderProps {
+  market?: Market;
   onOpenAddModal: () => void;
   onRunDailyCheck: () => Promise<void>;
   onRunEarningsCheck: () => Promise<void>;
@@ -23,6 +26,7 @@ interface HeaderProps {
 }
 
 export default function Header({
+  market = "us",
   onOpenAddModal,
   onRunDailyCheck,
   onRunEarningsCheck,
@@ -34,23 +38,39 @@ export default function Header({
 }: HeaderProps) {
   const isAnyJobRunning = isDailyLoading || isEarningsLoading;
   const isDark = theme === "dark";
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const brandTitle =
+    market === "jp" ? "kinun-signal JP" : "Personal Stock Analyst";
+  const brandSubTitle =
+    market === "jp"
+      ? "日本株 DCF理論株価 & LINE割安アラート（J-Quants / EDINET）"
+      : "Institutional DCF Valuation & Automated LINE Equity Alert Terminal";
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-md transition-colors duration-200 dark:border-slate-800/80 dark:bg-slate-950/90">
       <div className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 py-3.5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-        {/* Left: Brand Logo & Sub-badge */}
+        {/* Left: Hamburger, Brand Logo & Sub-badge */}
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen(true)}
+            aria-label="メニューを開く"
+            title="メニュー（市場切替）"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:shadow-none dark:hover:border-slate-600 dark:hover:bg-slate-800"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-900 text-white shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-400 dark:shadow-inner dark:shadow-emerald-500/20">
             <Activity className="h-5 w-5" />
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-xl">
-                Personal Stock Analyst
+                {brandTitle}
               </h1>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Institutional DCF Valuation &amp; Automated LINE Equity Alert Terminal
+              {brandSubTitle}
             </p>
           </div>
         </div>
@@ -120,6 +140,12 @@ export default function Header({
           </button>
         </div>
       </div>
+
+      <SideMenu
+        open={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        current={market}
+      />
     </header>
   );
 }

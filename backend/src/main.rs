@@ -111,6 +111,20 @@ async fn main() -> anyhow::Result<()> {
             "/api/jp/jobs/daily-check",
             post(jp_handlers::run_jp_daily_check_handler),
         )
+        .route(
+            "/api/jp/stocks/{code}",
+            get(jp_handlers::get_jp_stock_detail),
+        )
+        .route(
+            "/api/jp/stocks/{code}/recalculate",
+            post(jp_handlers::recalculate_jp_stock),
+        )
+        .route(
+            "/api/jp/jobs/earnings-check",
+            post(jp_handlers::run_jp_earnings_check_handler),
+        )
+        .route("/api/jp/alerts", get(jp_handlers::get_jp_alerts))
+        .route("/api/jp/system/info", get(handlers::get_system_info))
         .route("/api/system/info", get(handlers::get_system_info))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

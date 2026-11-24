@@ -31,7 +31,7 @@ db_jp,
 dcf::{self, DcfInput},
 handlers::AppState,
 models::{
-AddJpWatchlistRequest, JobSummaryResponse, JpStockDetailResponse, JpTheoreticalPriceRow,
+AddJpWatchlistRequest, JobSummaryResponse, JpAlertLogRow, JpStockDetailResponse, JpTheoreticalPriceRow,
 JpWatchlistItemResponse, JpWatchlistRow,
 },
 services::{
@@ -461,4 +461,87 @@ alerts_triggered: alerts,
 messages,
 executed_at: Utc::now(),
 })
+}
+
+// ---- Integration additions: routes the JP frontend calls ----
+
+pub async fn recalculate_jp_stock(
+    State(state): State<Arc<AppState>>,
+    Path(code): Path<String>,
+) -> ApiResult<Json<JpStockDetailResponse>> {
+    let code = normalize_code(&code).ok_or_else(|| bad_request("invalid code"))?;
+    let watchlist = db_jp::get_jp_watchlist(&state.pool, &code)
+        .await
+        .map_err(internal_err)?
+        .ok_or_else(|| not_found_err("JP watchlist entry not found"))?;
+    calculate_jp_theoretical(&state, &code, watchlist.target_discount_rate, "MANUAL")
+        .await
+        .map_err(internal_err)?;
+    get_jp_stock_detail(State(state), Path(code)).await
+}
+
+pub async fn get_jp_alerts(
+    State(state): State<Arc<AppState>>,
+) -> ApiResult<Json<Vec<JpAlertLogRow>>> {
+    let alerts = db_jp::get_recent_jp_alerts(&state.pool, 30)
+        .await
+        .map_err(internal_err)?;
+    Ok(Json(alerts))
+}
+
+pub async fn run_jp_earnings_check_handler(
+    State(state): State<Arc<AppState>>,
+) -> ApiResult<Json<JobSummaryResponse>> {
+    let summary = execute_jp_earnings_check(&state).await.map_err(internal_err)?;
+    Ok(Json(summary))
+}
+
+/// JP earnings-check (trial): when a watchlist entry's latest earnings date
+/// has advanced beyond the stored one, recalculate the theoretical price
+/// and record an EARNINGS alert in jp_alert_logs. LINE delivery is not
+/// wired for JP yet, same as the JP daily-check.
+pub async fn execute_jp_earnings_check(state: &AppState) -> anyhow::Result<JobSummaryResponse> {
+    let watchlists = db_jp::get_all_jp_watchlists(&state.pool).await?;
+    let mut processed = 0usize;
+    let mut alerts = 0usize;
+    let mut messages = Vec::new();
+
+    for w in &watchlists {
+        let (fin, _summary, _bar) =
+            match build_jp_financials(state, &w.code, w.edinet_code.as_deref()).await {
+                Ok(v) => v,
+                Err(err) => {
+                    messages.push(format!("{}: financials fetch failed: {err}", w.code));
+                    continue;
+                }
+            };
+        processed += 1;
+        let new_date = fin.latest_earnings_date;
+        let is_new = match (new_date, w.last_earnings_date) {
+            (Some(d), Some(prev)) => d > prev,
+            (Some(_), None) => false,
+            _ => false,
+        };
+        if is_new {
+            calculate_jp_theoretical(state, &w.code, w.target_discount_rate, "EARNINGS_UPDATE")
+                .await?;
+            let msg = format!(
+                "{} ({}) の新しい決算が検出されました（決算日: {}）。理論株価を再計算しました。",
+                w.company_name,
+                w.code,
+                new_date.unwrap()
+            );
+            db_jp::insert_jp_alert_log(&state.pool, &w.code, "EARNINGS", &msg).await?;
+            alerts += 1;
+            messages.push(msg);
+        }
+    }
+
+    Ok(JobSummaryResponse {
+        job_name: "jp-earnings-check".to_string(),
+        processed_count: processed,
+        alerts_triggered: alerts,
+        messages,
+        executed_at: Utc::now(),
+    })
 }

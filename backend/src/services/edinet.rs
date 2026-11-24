@@ -48,7 +48,7 @@ pub struct EdinetDcfDetails {
     pub cash_and_short_term_investments: f64,
     pub total_debt: f64,
     pub operating_cash_flow: f64,
-    pub capex: f64, // positive amount spent
+    pub capex: f64,          // positive amount spent
     pub free_cash_flow: f64, // operating CF - capex
     pub shares_outstanding: f64,
     pub revenue: Option<f64>,
@@ -105,9 +105,18 @@ impl EdinetClient {
                     .filter_map(|d| {
                         Some(EdinetDocument {
                             doc_id: d.get("docID")?.as_str()?.to_string(),
-                            edinet_code: d.get("edinetCode").and_then(|x| x.as_str()).map(str::to_string),
-                            sec_code: d.get("secCode").and_then(|x| x.as_str()).map(str::to_string),
-                            filer_name: d.get("filerName").and_then(|x| x.as_str()).map(str::to_string),
+                            edinet_code: d
+                                .get("edinetCode")
+                                .and_then(|x| x.as_str())
+                                .map(str::to_string),
+                            sec_code: d
+                                .get("secCode")
+                                .and_then(|x| x.as_str())
+                                .map(str::to_string),
+                            filer_name: d
+                                .get("filerName")
+                                .and_then(|x| x.as_str())
+                                .map(str::to_string),
                             doc_type_code: d
                                 .get("docTypeCode")
                                 .and_then(|x| x.as_str())
@@ -216,10 +225,12 @@ impl EdinetClient {
 // ---- XBRL extraction layer ----
 
 /// One element occurrence: its attributes string and raw text value.
-fn element_values<'a>(xml: &'a str, local_name: &str) -> Vec<(String, f64)> {
+fn element_values(xml: &str, local_name: &str) -> Vec<(String, f64)> {
     let mut out = Vec::new();
     for segment in xml.split('<').skip(1) {
-        let Some(gt) = segment.find('>') else { continue };
+        let Some(gt) = segment.find('>') else {
+            continue;
+        };
         let tag_and_attrs = &segment[..gt];
         if tag_and_attrs.starts_with('/') || tag_and_attrs.ends_with('/') {
             continue; // closing or self-closing tag
@@ -293,7 +304,10 @@ pub fn extract_dcf_details_from_xbrl(xml: &str) -> Option<EdinetDcfDetails> {
     // Cash & short-term investments.
     let cash = match (
         first_of(xml, &["CashAndDeposits", "CashAndCashEquivalents"]),
-        first_of(xml, &["ShortTermInvestmentSecurities", "MarketableSecurities"]),
+        first_of(
+            xml,
+            &["ShortTermInvestmentSecurities", "MarketableSecurities"],
+        ),
     ) {
         (Some(c), Some(st)) => Some(c + st),
         (Some(c), None) => Some(c),
@@ -318,35 +332,50 @@ pub fn extract_dcf_details_from_xbrl(xml: &str) -> Option<EdinetDcfDetails> {
     )
     .or_else(|| first_of(xml, &["TotalLiabilities"]))?;
 
-    let operating_cf = first_of(xml, &[
-        "NetCashProvidedByUsedInOperatingActivities",
-        "CashFlowsFromOperatingActivities",
-        "NetCashProvidedByOperatingActivities",
-    ])?;
-    let capex = sum_of_firsts(xml, &[
-        "PurchaseOfPropertyPlantAndEquipment",
-        "PaymentsForPurchaseOfPropertyPlantAndEquipment",
-        "PurchaseOfIntangibleAssets",
-    ])
+    let operating_cf = first_of(
+        xml,
+        &[
+            "NetCashProvidedByUsedInOperatingActivities",
+            "CashFlowsFromOperatingActivities",
+            "NetCashProvidedByOperatingActivities",
+        ],
+    )?;
+    let capex = sum_of_firsts(
+        xml,
+        &[
+            "PurchaseOfPropertyPlantAndEquipment",
+            "PaymentsForPurchaseOfPropertyPlantAndEquipment",
+            "PurchaseOfIntangibleAssets",
+        ],
+    )
     .unwrap_or(0.0);
 
-    let issued = first_of(xml, &[
-        "TotalNumberOfIssuedShares",
-        "NumberOfSharesIssued",
-        "IssuedSharesTotalQuantity",
-    ])?;
+    let issued = first_of(
+        xml,
+        &[
+            "TotalNumberOfIssuedShares",
+            "NumberOfSharesIssued",
+            "IssuedSharesTotalQuantity",
+        ],
+    )?;
     let treasury = first_of(xml, &["NumberOfTreasuryShares", "TreasuryShares"]).unwrap_or(0.0);
     let shares_outstanding = (issued - treasury).max(0.0);
 
-    let revenue = first_of(xml, &[
-        "NetSales",
-        "RevenueFromContractsWithCustomers",
-        "OperatingRevenue1",
-        "OrdinaryIncome",
-    ]);
+    let revenue = first_of(
+        xml,
+        &[
+            "NetSales",
+            "RevenueFromContractsWithCustomers",
+            "OperatingRevenue1",
+            "OrdinaryIncome",
+        ],
+    );
     let interest_expense = first_of(xml, &["InterestExpenses", "InterestExpense"]);
     let effective_tax_rate = match (
-        first_of(xml, &["IncomeTaxes", "IncomeTaxExpense", "TotalIncomeTaxes"]),
+        first_of(
+            xml,
+            &["IncomeTaxes", "IncomeTaxExpense", "TotalIncomeTaxes"],
+        ),
         first_of(xml, &["IncomeBeforeIncomeTaxes", "ProfitBeforeIncomeTaxes"]),
     ) {
         (Some(tax), Some(pre)) if pre > 0.0 => Some((tax / pre).clamp(0.0, 0.6)),
@@ -388,13 +417,8 @@ mod tests {
 
     #[test]
     fn extracts_dcf_details_from_sample_xbrl() {
-        let d = match extract_dcf_details_from_xbrl(SAMPLE) {
-            Some(d) => d,
-            None => {
-                assert!(false, "extraction returned None for valid sample");
-                return;
-            }
-        };
+        let d = extract_dcf_details_from_xbrl(SAMPLE)
+            .expect("extraction returned None for valid sample");
         // (9,000,000 + 1,500,000) million JPY
         assert_eq!(d.cash_and_short_term_investments, 10_500_000_000_000.0);
         // (5,000,000 + 3,000,000 + 12,000,000) million JPY

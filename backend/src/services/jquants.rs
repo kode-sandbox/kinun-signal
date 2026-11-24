@@ -173,8 +173,10 @@ impl JQuantsClient {
         let v = self
             .get_json("/fins/summary", &[("code", code.clone())])
             .await?;
-        let mut summaries: Vec<JpFinSummary> =
-            rows_of(&v).iter().map(|r| parse_summary(r, &code)).collect();
+        let mut summaries: Vec<JpFinSummary> = rows_of(&v)
+            .iter()
+            .map(|r| parse_summary(r, &code))
+            .collect();
         summaries.sort_by_key(|s| s.disclosed_date);
         Ok(summaries.pop())
     }
@@ -199,12 +201,12 @@ impl JQuantsClient {
                 .iter()
                 .filter_map(|r| {
                     let d = str_of(r, &["Date", "EarningsDate", "ScheduledDate"])?;
-                    NaiveDate::parse_from_str(&d, "%Y-%m-%d").ok().map(|date| {
-                        JpEarningsSchedule {
+                    NaiveDate::parse_from_str(&d, "%Y-%m-%d")
+                        .ok()
+                        .map(|date| JpEarningsSchedule {
                             code: code.clone(),
                             scheduled_date: date,
-                        }
-                    })
+                        })
                 })
                 .collect()),
             Err(err) => {
@@ -241,8 +243,9 @@ impl JQuantsClient {
         ];
         raw.iter()
             .filter_map(|(d, o, h, l, c, v)| {
-                NaiveDate::parse_from_str(d, "%Y-%m-%d").ok().map(|date| {
-                    JpDailyBar {
+                NaiveDate::parse_from_str(d, "%Y-%m-%d")
+                    .ok()
+                    .map(|date| JpDailyBar {
                         code: code.to_string(),
                         date,
                         open: *o,
@@ -250,8 +253,7 @@ impl JQuantsClient {
                         low: *l,
                         close: *c,
                         volume: *v,
-                    }
-                })
+                    })
             })
             .collect()
     }
@@ -283,7 +285,14 @@ fn rows_of(v: &Value) -> Vec<Value> {
     if let Value::Array(a) = v {
         return a.clone();
     }
-    for key in ["data", "daily_quotes", "bars", "statements", "info", "results"] {
+    for key in [
+        "data",
+        "daily_quotes",
+        "bars",
+        "statements",
+        "info",
+        "results",
+    ] {
         if let Some(Value::Array(a)) = v.get(key) {
             return a.clone();
         }
@@ -351,9 +360,12 @@ fn parse_summary(r: &Value, fallback_code: &str) -> JpFinSummary {
         net_assets: num_of(r, &["Equity", "NetAssets"]),
         total_assets: num_of(r, &["TotalAssets"]),
         equity_ratio: num_of(r, &["EquityToTotalAssetRatio", "EquityRatio"]),
-        shares_outstanding: num_of(r, &[
-            "NumberOfIssuedAndOutstandingSharesAtTheEndOfFiscalYearIncludingTreasuryStock",
-            "SharesOutstanding",
-        ]),
+        shares_outstanding: num_of(
+            r,
+            &[
+                "NumberOfIssuedAndOutstandingSharesAtTheEndOfFiscalYearIncludingTreasuryStock",
+                "SharesOutstanding",
+            ],
+        ),
     }
 }

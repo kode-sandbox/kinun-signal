@@ -65,10 +65,10 @@ impl AppConfig {
         let line_user_id =
             env::var("LINE_USER_ID").unwrap_or_else(|_| "mock_line_user_id".to_string());
 
-        let jquants_api_key = env::var("JQUANTS_API_KEY")
-            .unwrap_or_else(|_| "mock_jquants_api_key".to_string());
-        let edinet_api_key = env::var("EDINET_API_KEY")
-            .unwrap_or_else(|_| "mock_edinet_api_key".to_string());
+        let jquants_api_key =
+            env::var("JQUANTS_API_KEY").unwrap_or_else(|_| "mock_jquants_api_key".to_string());
+        let edinet_api_key =
+            env::var("EDINET_API_KEY").unwrap_or_else(|_| "mock_edinet_api_key".to_string());
 
         Self {
             database_url,

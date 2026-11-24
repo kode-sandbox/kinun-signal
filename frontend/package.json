@@ -10,22 +10,22 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@tailwindcss/postcss": "^4.3.4",
+    "@tailwindcss/postcss": "^4.3.5",
     "braces": "^3.0.3",
-    "lucide-react": "^1.66.0",
-    "next": "16.4.5",
-    "postcss-selector-parser": "^7.1.7",
+    "lucide-react": "^1.73.0",
+    "next": "16.4.6",
+    "postcss-selector-parser": "^7.2.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.6.2",
-    "postcss": "8.5.32",
-    "tailwindcss": "4.3.3",
+    "postcss": "8.5.33",
+    "tailwindcss": "4.3.5",
     "typescript": "^7.0.2"
   }
 }

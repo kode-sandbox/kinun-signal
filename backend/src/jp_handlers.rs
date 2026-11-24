@@ -43,8 +43,9 @@ use crate::{
 
 type ApiResult<T> = Result<T, (StatusCode, Json<serde_json::Value>)>;
 
-/// TODO(D-JP4): replace with the live 10y JGB yield (MoF CSV is the leading
-/// candidate). Placeholder long-run JP risk-free rate for the trial.
+/// D-JP4: placeholder long-run JP risk-free rate for the trial. Replace
+/// with the live 10y JGB yield (MoF CSV is the leading candidate) once
+/// real data flows.
 const JP_RISK_FREE_RATE: f64 = 0.025;
 
 fn internal_err<E: std::fmt::Display>(err: E) -> (StatusCode, Json<serde_json::Value>) {
@@ -147,7 +148,7 @@ pub async fn build_jp_financials(
         latest_earnings_date: summary.as_ref().and_then(|s| s.disclosed_date),
         eps_actual: summary.as_ref().and_then(|s| s.eps),
         eps_estimated: summary.as_ref().and_then(|s| s.forecast_eps),
-        beta: None, // TODO: compute vs TOPIX from J-Quants daily bars (monthly closes).
+        beta: None, // TOPIX beta is not computed yet (planned from J-Quants daily bars, monthly closes).
         risk_free_rate: Some(JP_RISK_FREE_RATE),
         effective_tax_rate: details.effective_tax_rate,
         interest_expense: details.interest_expense,
@@ -523,19 +524,16 @@ pub async fn execute_jp_earnings_check(state: &AppState) -> anyhow::Result<JobSu
             };
         processed += 1;
         let new_date = fin.latest_earnings_date;
-        let is_new = match (new_date, w.last_earnings_date) {
-            (Some(d), Some(prev)) => d > prev,
-            (Some(_), None) => false,
-            _ => false,
+        let advanced_date = match (new_date, w.last_earnings_date) {
+            (Some(d), Some(prev)) if d > prev => Some(d),
+            _ => None,
         };
-        if is_new {
+        if let Some(new_date) = advanced_date {
             calculate_jp_theoretical(state, &w.code, w.target_discount_rate, "EARNINGS_UPDATE")
                 .await?;
             let msg = format!(
                 "{} ({}) の新しい決算が検出されました（決算日: {}）。理論株価を再計算しました。",
-                w.company_name,
-                w.code,
-                new_date.unwrap()
+                w.company_name, w.code, new_date
             );
             db_jp::insert_jp_alert_log(&state.pool, &w.code, "EARNINGS", &msg).await?;
             alerts += 1;

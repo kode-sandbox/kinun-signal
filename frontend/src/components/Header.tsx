@@ -47,6 +47,7 @@ export default function Header({
       : "Institutional DCF Valuation & Automated LINE Equity Alert Terminal";
 
   return (
+    <>
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-md transition-colors duration-200 dark:border-slate-800/80 dark:bg-slate-950/90">
       <div className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 py-3.5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         {/* Left: Hamburger, Brand Logo & Sub-badge */}
@@ -140,12 +141,13 @@ export default function Header({
           </button>
         </div>
       </div>
-
-      <SideMenu
-        open={isMenuOpen}
-        onClose={() => setIsMenuOpen(false)}
-        current={market}
-      />
     </header>
+
+    <SideMenu
+      open={isMenuOpen}
+      onClose={() => setIsMenuOpen(false)}
+      current={market}
+    />
+    </>
   );
 }

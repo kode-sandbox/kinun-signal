@@ -15,6 +15,13 @@ export interface DashboardCache {
 }
 
 const CACHE_KEY = "psa-dashboard-cache-v1";
+
+/**
+ * Cache key for the Japanese-stock dashboard. The US dashboard keeps the
+ * original key so existing cached data stays valid; each market must use
+ * its own key because both dashboards share the same origin.
+ */
+export const JP_DASHBOARD_CACHE_KEY = "psa-dashboard-cache-v1-jp";
 const CACHE_VERSION = 1;
 const MAX_CACHE_AGE_MS = 7 * 24 * 60 * 60 * 1000; // discard cache older than 7 days
 
@@ -22,9 +29,11 @@ interface StoredDashboardCache extends DashboardCache {
   version: number;
 }
 
-export function loadDashboardCache(): DashboardCache | null {
+export function loadDashboardCache(
+  cacheKey: string = CACHE_KEY
+): DashboardCache | null {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(cacheKey);
     if (!raw) {
       return null;
     }
@@ -54,7 +63,8 @@ export function loadDashboardCache(): DashboardCache | null {
 }
 
 export function saveDashboardCache(
-  data: Omit<DashboardCache, "savedAt">
+  data: Omit<DashboardCache, "savedAt">,
+  cacheKey: string = CACHE_KEY
 ): void {
   try {
     const stored: StoredDashboardCache = {
@@ -64,7 +74,7 @@ export function saveDashboardCache(
       alerts: data.alerts,
       llmModel: data.llmModel,
     };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(stored));
+    localStorage.setItem(cacheKey, JSON.stringify(stored));
   } catch {
     // Best-effort only: quota exceeded or storage unavailable.
   }
@@ -75,9 +85,12 @@ export function saveDashboardCache(
  * original savedAt, so a deleted stock does not briefly reappear from the
  * cache on the next visit.
  */
-export function removeTickerFromDashboardCache(ticker: string): void {
+export function removeTickerFromDashboardCache(
+  ticker: string,
+  cacheKey: string = CACHE_KEY
+): void {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(cacheKey);
     if (!raw) {
       return;
     }
@@ -86,7 +99,7 @@ export function removeTickerFromDashboardCache(ticker: string): void {
       return;
     }
     parsed.watchlist = parsed.watchlist.filter((item) => item.ticker !== ticker);
-    localStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
+    localStorage.setItem(cacheKey, JSON.stringify(parsed));
   } catch {
     // Best-effort only.
   }
